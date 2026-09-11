@@ -1,0 +1,37 @@
+# Render Blueprint for finance-engine: one gRPC API service + Postgres.
+# Deploy: connect this repo on Render, "New +" -> "Blueprint", point at this file.
+
+databases:
+  - name: finance-engine-db
+    databaseName: finance_engine
+    user: finance_engine
+    plan: basic-256mb
+    region: frankfurt
+    postgresMajorVersion: "17"
+
+services:
+  - type: web
+    name: finance-engine-api
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    dockerfilePath: ./deployments/Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    envVars:
+      - key: GRPC_ADDRESS
+        value: ":8443"
+      - key: PORT # Render routes external traffic to $PORT; keep in sync with GRPC_ADDRESS.
+        value: "8443"
+      - key: POSTGRES_DSN
+        fromDatabase:
+          name: finance-engine-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_DURATION
+        value: 720h
+      - key: APPLE_BUNDLE_ID
+        sync: false # Set to your app's bundle id, e.g. com.rsmrtk.finance-rsmrtk.
+      - key: NBU_EXCHANGE_URL
+        value: "https://bank.gov.ua/NBU_Exchange/exchange?json"

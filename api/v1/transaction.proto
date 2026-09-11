@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+import "v1/models/model_transaction.proto";
+import "v1/models/model_common.proto";
+
+option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
+
+service TransactionService {
+  rpc TransactionList(TransactionListRequest) returns (TransactionListReply);
+  rpc TransactionCreate(TransactionCreateRequest) returns (TransactionCreateReply);
+  rpc TransactionDelete(TransactionDeleteRequest) returns (TransactionDeleteReply);
+}
+
+// ====================
+// TransactionList
+// ====================
+message TransactionListRequest {
+  optional string from_date = 1; // RFC3339, inclusive.
+  optional string to_date = 2;   // RFC3339, inclusive.
+}
+
+message TransactionListReply {
+  repeated TransactionModel.Transaction transactions = 1;
+}
+
+// ====================
+// TransactionCreate
+// ====================
+message TransactionCreateRequest {
+  string amount = 1;
+  CurrencyModel.Currency currency = 2;
+  TransactionTypeModel.TransactionType type = 3;
+  string date = 4;
+  string note = 5;
+  string category_id = 6;
+}
+
+message TransactionCreateReply {
+  TransactionModel.Transaction transaction = 1;
+}
+
+// ====================
+// TransactionDelete
+// ====================
+message TransactionDeleteRequest {
+  string transaction_id = 1;
+}
+
+message TransactionDeleteReply {}

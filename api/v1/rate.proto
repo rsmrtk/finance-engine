@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+import "v1/models/model_rate.proto";
+
+option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
+
+service RateService {
+  rpc RateList(RateListRequest) returns (RateListReply);
+}
+
+// ====================
+// RateList
+// ====================
+message RateListRequest {}
+
+message RateListReply {
+  repeated RateModel.Rate rates = 1;
+}

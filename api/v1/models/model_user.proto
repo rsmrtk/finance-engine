@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+import "v1/models/model_common.proto";
+
+option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
+
+message UserModel {
+  message User {
+    string id = 1;
+    string email = 2;
+    CurrencyModel.Currency base_currency = 3;
+    string created_at = 4;
+  }
+}

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+import "v1/models/model_common.proto";
+
+option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
+
+message RateModel {
+  message Rate {
+    CurrencyModel.Currency currency = 1;
+    double rate_to_uah = 2; // How many UAH for 1 unit of `currency`.
+    string updated_at = 3; // RFC3339.
+  }
+}

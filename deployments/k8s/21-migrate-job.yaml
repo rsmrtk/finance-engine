@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: finance-engine
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: goose
+          image: finance-engine-migrate:local
+          imagePullPolicy: Never # Loaded into kind via `kind load docker-image`; migrations are baked in.
+          # Local kind dev credentials only (see postgres-credentials Secret) —
+          # not a production secret, so a literal DSN here is fine.
+          args:
+            - postgres
+            - "postgres://finance:finance@postgres:5432/finance_engine?sslmode=disable"
+            - up

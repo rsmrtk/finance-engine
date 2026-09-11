@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
+
+message CurrencyModel {
+  enum Currency {
+    CURRENCY_UNSPECIFIED = 0;
+    CURRENCY_UAH = 1;
+    CURRENCY_USD = 2;
+    CURRENCY_EUR = 3;
+    CURRENCY_GBP = 4;
+    CURRENCY_PLN = 5;
+  }
+}
+
+message TransactionTypeModel {
+  enum TransactionType {
+    TRANSACTION_TYPE_UNSPECIFIED = 0;
+    TRANSACTION_TYPE_EXPENSE = 1;
+    TRANSACTION_TYPE_INCOME = 2;
+  }
+}

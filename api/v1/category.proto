@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "v1/models/model_category.proto";
+import "v1/models/model_common.proto";
+
+option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
+
+service CategoryService {
+  rpc CategoryList(CategoryListRequest) returns (CategoryListReply);
+  rpc CategoryCreate(CategoryCreateRequest) returns (CategoryCreateReply);
+  rpc CategoryDelete(CategoryDeleteRequest) returns (CategoryDeleteReply);
+}
+
+// ====================
+// CategoryList
+// ====================
+message CategoryListRequest {}
+
+message CategoryListReply {
+  repeated CategoryModel.Category categories = 1;
+}
+
+// ====================
+// CategoryCreate
+// ====================
+message CategoryCreateRequest {
+  string name = 1;
+  string icon_name = 2;
+  string color_hex = 3;
+  TransactionTypeModel.TransactionType type = 4;
+}
+
+message CategoryCreateReply {
+  CategoryModel.Category category = 1;
+}
+
+// ====================
+// CategoryDelete
+// ====================
+message CategoryDeleteRequest {
+  string category_id = 1;
+}
+
+message CategoryDeleteReply {}

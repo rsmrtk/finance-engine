@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+import "v1/models/model_common.proto";
+
+option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
+
+message TransactionModel {
+  message Transaction {
+    string id = 1;
+    string amount = 2; // Decimal as string, e.g. "350.00", to avoid float precision loss.
+    CurrencyModel.Currency currency = 3;
+    TransactionTypeModel.TransactionType type = 4;
+    string date = 5; // RFC3339.
+    string note = 6;
+    string category_id = 7;
+  }
+}
