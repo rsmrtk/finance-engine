@@ -7,6 +7,7 @@ type: Opaque
 stringData:
   JWT_SECRET: dev-secret-change-me
   APPLE_BUNDLE_ID: "com.rsmrtk.finance-rsmrtk"
+  MONOBANK_TOKEN_KEY: dev-monobank-key-change-me
 
 ---
 apiVersion: apps/v1
@@ -30,15 +31,20 @@ spec:
           imagePullPolicy: Never # Loaded into kind via `kind load docker-image`, never pulled from a registry.
           ports:
             - containerPort: 8443
+            - containerPort: 8080
           env:
             - name: GRPC_ADDRESS
               value: ":8443"
+            - name: WEBHOOK_ADDRESS
+              value: ":8080"
             - name: POSTGRES_DSN
               value: "postgres://finance:finance@postgres:5432/finance_engine?sslmode=disable"
             - name: NBU_EXCHANGE_URL
               value: "https://bank.gov.ua/NBU_Exchange/exchange?json"
             - name: DEV_MODE
               value: "true" # kind is local-only; never set this on Render/production.
+            - name: PUBLIC_BASE_URL
+              value: "" # Empty on kind (no public HTTPS) -> Monobank connect stays unavailable until deployed publicly.
           envFrom:
             - secretRef:
                 name: backend-secrets
@@ -60,6 +66,11 @@ spec:
   selector:
     app: finance-engine-api
   ports:
-    - port: 8443
+    - name: grpc
+      port: 8443
       targetPort: 8443
       nodePort: 30443
+    - name: webhook
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080

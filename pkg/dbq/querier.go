@@ -17,6 +17,11 @@ type Querier interface {
 	CategoryGetByID(ctx context.Context, id pgtype.UUID) (Category, error)
 	// Returns the user's own categories plus the shared default ones.
 	CategoryListForUser(ctx context.Context, userID pgtype.UUID) ([]Category, error)
+	MonobankConnectionDelete(ctx context.Context, userID pgtype.UUID) error
+	MonobankConnectionGetByUserID(ctx context.Context, userID pgtype.UUID) (MonobankConnection, error)
+	MonobankConnectionGetByWebhookSecret(ctx context.Context, webhookSecret string) (MonobankConnection, error)
+	MonobankConnectionTouchSync(ctx context.Context, userID pgtype.UUID) error
+	MonobankConnectionUpsert(ctx context.Context, arg MonobankConnectionUpsertParams) (MonobankConnection, error)
 	RateList(ctx context.Context) ([]ExchangeRate, error)
 	RateUpsert(ctx context.Context, arg RateUpsertParams) error
 	TransactionCreate(ctx context.Context, arg TransactionCreateParams) (Transaction, error)

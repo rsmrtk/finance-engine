@@ -18,6 +18,17 @@ type Config struct {
 	// local testing without a paid Apple Developer account. Never set this
 	// on a real deployment.
 	DevMode bool
+
+	// WebhookAddress is where the plain-HTTP webhook server listens (Monobank
+	// speaks JSON/HTTP, not gRPC).
+	WebhookAddress string
+	// PublicBaseURL is this server's own public HTTPS URL, used to build the
+	// webhook URL registered with Monobank. Must be reachable from the
+	// internet, so it's meaningless for a local-only (kind) deployment.
+	PublicBaseURL string
+	// MonobankTokenKey encrypts personal tokens at rest (AES-256, derived via
+	// SHA-256 from this passphrase — any non-empty string works).
+	MonobankTokenKey string
 }
 
 func Load() (*Config, error) {
@@ -34,6 +45,10 @@ func Load() (*Config, error) {
 		AppleBundleID:  getEnv("APPLE_BUNDLE_ID", ""),
 		NBUExchangeURL: getEnv("NBU_EXCHANGE_URL", "https://bank.gov.ua/NBU_Exchange/exchange?json"),
 		DevMode:        getEnv("DEV_MODE", "false") == "true",
+
+		WebhookAddress:   getEnv("WEBHOOK_ADDRESS", ":8080"),
+		PublicBaseURL:    getEnv("PUBLIC_BASE_URL", ""),
+		MonobankTokenKey: getEnv("MONOBANK_TOKEN_KEY", "dev-monobank-key-change-me"),
 	}
 
 	if err := cfg.validate(); err != nil {

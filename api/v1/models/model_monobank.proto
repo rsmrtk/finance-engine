@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
+
+message MonobankConnectionModel {
+  message Connection {
+    bool is_connected = 1;
+    string masked_pan = 2;   // e.g. "537541******1234", for display only.
+    string connected_at = 3; // RFC3339.
+    string last_synced_at = 4; // RFC3339, empty if never synced.
+  }
+}

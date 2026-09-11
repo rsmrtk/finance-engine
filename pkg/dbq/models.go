@@ -25,6 +25,16 @@ type ExchangeRate struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type MonobankConnection struct {
+	UserID         pgtype.UUID        `json:"user_id"`
+	EncryptedToken []byte             `json:"encrypted_token"`
+	WebhookSecret  string             `json:"webhook_secret"`
+	MaskedPan      string             `json:"masked_pan"`
+	AccountID      string             `json:"account_id"`
+	ConnectedAt    pgtype.Timestamptz `json:"connected_at"`
+	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
+}
+
 type Transaction struct {
 	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`

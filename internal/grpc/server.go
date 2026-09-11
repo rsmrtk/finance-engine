@@ -13,6 +13,7 @@ import (
 	"github.com/rsmrtk/finance-engine/internal/grpc/interceptors"
 	authsvc "github.com/rsmrtk/finance-engine/internal/service/auth"
 	categorysvc "github.com/rsmrtk/finance-engine/internal/service/category"
+	monobanksvc "github.com/rsmrtk/finance-engine/internal/service/monobank"
 	ratesvc "github.com/rsmrtk/finance-engine/internal/service/rate"
 	transactionsvc "github.com/rsmrtk/finance-engine/internal/service/transaction"
 	"github.com/rsmrtk/finance-engine/pkg/jwt"
@@ -24,6 +25,7 @@ type Services struct {
 	Category    *categorysvc.Service
 	Transaction *transactionsvc.Service
 	Rate        *ratesvc.Service
+	Monobank    *monobanksvc.Service
 }
 
 type ServerOptions struct {
@@ -58,6 +60,7 @@ func NewServer(o ServerOptions) *Server {
 	pb.RegisterCategoryServiceServer(server, controllers.NewCategoryController(o.Services.Category))
 	pb.RegisterTransactionServiceServer(server, controllers.NewTransactionController(o.Services.Transaction))
 	pb.RegisterRateServiceServer(server, controllers.NewRateController(o.Services.Rate))
+	pb.RegisterMonobankServiceServer(server, controllers.NewMonobankController(o.Services.Monobank))
 
 	reflection.Register(server) // Lets grpcurl/Postman introspect the API without the .proto files.
 
