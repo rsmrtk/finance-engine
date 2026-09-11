@@ -40,7 +40,10 @@ func run() error {
 	}
 
 	log := logger.NewConsoleLogger()
-	log.Info("starting finance-engine", logger.H{"grpc_address": cfg.GRPCAddress})
+	log.Info("starting finance-engine", logger.H{"grpc_address": cfg.GRPCAddress, "dev_mode": cfg.DevMode})
+	if cfg.DevMode {
+		log.Info("DEV_MODE is on: AuthService.DevSignIn bypasses Sign in with Apple. Never enable this on a real deployment.", nil)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -62,7 +65,7 @@ func run() error {
 	appleVerifier := appleauth.NewVerifier(cfg.AppleBundleID)
 
 	services := grpcserver.Services{
-		Auth:        authsvc.New(userRepo, appleVerifier, jwtManager),
+		Auth:        authsvc.New(userRepo, appleVerifier, jwtManager, cfg.DevMode),
 		Category:    categorysvc.New(categoryRepo),
 		Transaction: transactionsvc.New(transactionRepo, categoryRepo),
 		Rate:        ratesvc.New(rateRepo),

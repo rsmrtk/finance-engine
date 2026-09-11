@@ -14,6 +14,10 @@ type Config struct {
 	JWTDuration    time.Duration
 	AppleBundleID  string
 	NBUExchangeURL string
+	// DevMode enables AuthService.DevSignIn, a Sign in with Apple bypass for
+	// local testing without a paid Apple Developer account. Never set this
+	// on a real deployment.
+	DevMode bool
 }
 
 func Load() (*Config, error) {
@@ -29,6 +33,7 @@ func Load() (*Config, error) {
 		JWTDuration:    jwtDuration,
 		AppleBundleID:  getEnv("APPLE_BUNDLE_ID", ""),
 		NBUExchangeURL: getEnv("NBU_EXCHANGE_URL", "https://bank.gov.ua/NBU_Exchange/exchange?json"),
+		DevMode:        getEnv("DEV_MODE", "false") == "true",
 	}
 
 	if err := cfg.validate(); err != nil {

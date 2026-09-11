@@ -37,6 +37,8 @@ spec:
               value: "postgres://finance:finance@postgres:5432/finance_engine?sslmode=disable"
             - name: NBU_EXCHANGE_URL
               value: "https://bank.gov.ua/NBU_Exchange/exchange?json"
+            - name: DEV_MODE
+              value: "true" # kind is local-only; never set this on Render/production.
           envFrom:
             - secretRef:
                 name: backend-secrets

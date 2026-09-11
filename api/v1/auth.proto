@@ -6,6 +6,12 @@ option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
 
 service AuthService {
   rpc SignInWithApple(SignInWithAppleRequest) returns (SignInWithAppleReply);
+
+  // DevSignIn is a local-dev-only bypass for Sign in with Apple, which
+  // requires a paid Apple Developer account to test on a real capability.
+  // The server rejects this call unless DEV_MODE=true (never enabled on
+  // Render/production).
+  rpc DevSignIn(DevSignInRequest) returns (SignInWithAppleReply);
 }
 
 // ====================
@@ -18,4 +24,11 @@ message SignInWithAppleRequest {
 message SignInWithAppleReply {
   string access_token = 1; // JWT to use as Bearer token for subsequent calls.
   UserModel.User user = 2;
+}
+
+// ====================
+// DevSignIn
+// ====================
+message DevSignInRequest {
+  string device_id = 1; // Any stable string identifying the test device/user.
 }

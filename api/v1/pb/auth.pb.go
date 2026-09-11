@@ -120,6 +120,53 @@ func (x *SignInWithAppleReply) GetUser() *UserModel_User {
 	return nil
 }
 
+// ====================
+// DevSignIn
+// ====================
+type DevSignInRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"` // Any stable string identifying the test device/user.
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DevSignInRequest) Reset() {
+	*x = DevSignInRequest{}
+	mi := &file_v1_auth_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DevSignInRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DevSignInRequest) ProtoMessage() {}
+
+func (x *DevSignInRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_auth_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DevSignInRequest.ProtoReflect.Descriptor instead.
+func (*DevSignInRequest) Descriptor() ([]byte, []int) {
+	return file_v1_auth_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DevSignInRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
 var File_v1_auth_proto protoreflect.FileDescriptor
 
 const file_v1_auth_proto_rawDesc = "" +
@@ -129,9 +176,12 @@ const file_v1_auth_proto_rawDesc = "" +
 	"\x0eidentity_token\x18\x01 \x01(\tR\ridentityToken\"^\n" +
 	"\x14SignInWithAppleReply\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
-	"\x04user\x18\x02 \x01(\v2\x0f.UserModel.UserR\x04user2P\n" +
+	"\x04user\x18\x02 \x01(\v2\x0f.UserModel.UserR\x04user\"/\n" +
+	"\x10DevSignInRequest\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId2\x87\x01\n" +
 	"\vAuthService\x12A\n" +
-	"\x0fSignInWithApple\x12\x17.SignInWithAppleRequest\x1a\x15.SignInWithAppleReplyB,Z*github.com/rsmrtk/finance-engine/api/v1/pbb\x06proto3"
+	"\x0fSignInWithApple\x12\x17.SignInWithAppleRequest\x1a\x15.SignInWithAppleReply\x125\n" +
+	"\tDevSignIn\x12\x11.DevSignInRequest\x1a\x15.SignInWithAppleReplyB,Z*github.com/rsmrtk/finance-engine/api/v1/pbb\x06proto3"
 
 var (
 	file_v1_auth_proto_rawDescOnce sync.Once
@@ -145,18 +195,21 @@ func file_v1_auth_proto_rawDescGZIP() []byte {
 	return file_v1_auth_proto_rawDescData
 }
 
-var file_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_v1_auth_proto_goTypes = []any{
 	(*SignInWithAppleRequest)(nil), // 0: SignInWithAppleRequest
 	(*SignInWithAppleReply)(nil),   // 1: SignInWithAppleReply
-	(*UserModel_User)(nil),         // 2: UserModel.User
+	(*DevSignInRequest)(nil),       // 2: DevSignInRequest
+	(*UserModel_User)(nil),         // 3: UserModel.User
 }
 var file_v1_auth_proto_depIdxs = []int32{
-	2, // 0: SignInWithAppleReply.user:type_name -> UserModel.User
+	3, // 0: SignInWithAppleReply.user:type_name -> UserModel.User
 	0, // 1: AuthService.SignInWithApple:input_type -> SignInWithAppleRequest
-	1, // 2: AuthService.SignInWithApple:output_type -> SignInWithAppleReply
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
+	2, // 2: AuthService.DevSignIn:input_type -> DevSignInRequest
+	1, // 3: AuthService.SignInWithApple:output_type -> SignInWithAppleReply
+	1, // 4: AuthService.DevSignIn:output_type -> SignInWithAppleReply
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -174,7 +227,7 @@ func file_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_auth_proto_rawDesc), len(file_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -43,6 +43,7 @@ func NewServer(o ServerOptions) *Server {
 	recoveryInterceptor := interceptors.NewRecoveryInterceptor(o.Logger)
 	authInterceptor := interceptors.NewAuthInterceptor(o.JWT, []string{
 		pb.AuthService_SignInWithApple_FullMethodName,
+		pb.AuthService_DevSignIn_FullMethodName,
 	})
 
 	server := grpc.NewServer(
