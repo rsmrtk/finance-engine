@@ -6,7 +6,7 @@ metadata:
 type: Opaque
 stringData:
   JWT_SECRET: dev-secret-change-me
-  APPLE_BUNDLE_ID: "-01.finance-rsmrtk"
+  APPLE_BUNDLE_ID: "com.rsmrtk.finance-rsmrtk"
 
 ---
 apiVersion: apps/v1
