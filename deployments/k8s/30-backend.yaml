@@ -8,6 +8,10 @@ stringData:
   JWT_SECRET: dev-secret-change-me
   APPLE_BUNDLE_ID: "com.rsmrtk.finance-rsmrtk"
   MONOBANK_TOKEN_KEY: dev-monobank-key-change-me
+  # From Google Cloud Console -> Credentials -> OAuth Client ID (Web
+  # application). Empty is fine locally until Google Sign-In is wired up
+  # on the frontend — only /api/auth/google needs it.
+  GOOGLE_CLIENT_ID: ""
 
 ---
 apiVersion: apps/v1
@@ -39,12 +43,16 @@ spec:
               value: ":8080"
             - name: POSTGRES_DSN
               value: "postgres://finance:finance@postgres:5432/finance_engine?sslmode=disable"
+            - name: REDIS_ADDR
+              value: "redis:6379"
             - name: NBU_EXCHANGE_URL
               value: "https://bank.gov.ua/NBU_Exchange/exchange?json"
             - name: DEV_MODE
               value: "true" # kind is local-only; never set this on Render/production.
             - name: PUBLIC_BASE_URL
               value: "" # Empty on kind (no public HTTPS) -> Monobank connect stays unavailable until deployed publicly.
+            - name: CORS_ALLOWED_ORIGIN
+              value: "http://localhost:5173" # Vite dev server; update once finance-ui is deployed somewhere real.
           envFrom:
             - secretRef:
                 name: backend-secrets

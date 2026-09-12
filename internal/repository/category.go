@@ -13,11 +13,13 @@ import (
 type Category struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID // uuid.Nil for shared default categories.
-	Name      string
+	Name      string    // Source of truth — whatever the user typed. Never overwritten by translation.
 	IconName  string
 	ColorHex  string
 	Type      string // "expense" or "income".
 	IsDefault bool
+	NameUK    string // Auto-translated display name, empty until translated (see service/category).
+	NameEN    string
 	CreatedAt time.Time
 }
 
@@ -36,23 +38,33 @@ func (r *CategoryRepository) ListForUser(ctx context.Context, userID uuid.UUID) 
 	}
 	categories := make([]Category, len(rows))
 	for i, row := range rows {
-		categories[i] = categoryFromRow(row)
+		categories[i] = Category{
+			ID: pgutil.UUIDToGoogle(row.ID), UserID: pgutil.UUIDToGoogle(row.UserID), Name: row.Name,
+			IconName: row.IconName, ColorHex: row.ColorHex, Type: row.Type, IsDefault: row.IsDefault,
+			NameUK: row.NameUk.String, NameEN: row.NameEn.String, CreatedAt: row.CreatedAt.Time,
+		}
 	}
 	return categories, nil
 }
 
-func (r *CategoryRepository) Create(ctx context.Context, userID uuid.UUID, name, iconName, colorHex, transactionType string) (Category, error) {
+func (r *CategoryRepository) Create(ctx context.Context, userID uuid.UUID, name, iconName, colorHex, transactionType, nameUK, nameEN string) (Category, error) {
 	row, err := r.q.CategoryCreate(ctx, dbq.CategoryCreateParams{
 		UserID:   pgutil.UUIDFromGoogle(userID),
 		Name:     name,
 		IconName: iconName,
 		ColorHex: colorHex,
 		Type:     transactionType,
+		NameUk:   pgutil.TextFromString(nameUK),
+		NameEn:   pgutil.TextFromString(nameEN),
 	})
 	if err != nil {
 		return Category{}, err
 	}
-	return categoryFromRow(row), nil
+	return Category{
+		ID: pgutil.UUIDToGoogle(row.ID), UserID: pgutil.UUIDToGoogle(row.UserID), Name: row.Name,
+		IconName: row.IconName, ColorHex: row.ColorHex, Type: row.Type, IsDefault: row.IsDefault,
+		NameUK: row.NameUk.String, NameEN: row.NameEn.String, CreatedAt: row.CreatedAt.Time,
+	}, nil
 }
 
 func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (Category, error) {
@@ -60,7 +72,22 @@ func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (Categor
 	if err != nil {
 		return Category{}, err
 	}
-	return categoryFromRow(row), nil
+	return Category{
+		ID: pgutil.UUIDToGoogle(row.ID), UserID: pgutil.UUIDToGoogle(row.UserID), Name: row.Name,
+		IconName: row.IconName, ColorHex: row.ColorHex, Type: row.Type, IsDefault: row.IsDefault,
+		NameUK: row.NameUk.String, NameEN: row.NameEn.String, CreatedAt: row.CreatedAt.Time,
+	}, nil
+}
+
+// UpdateTranslations lazily backfills name_uk/name_en on a category that
+// predates the translation feature (or whose earlier translation attempt
+// failed) — called opportunistically from the service layer while listing.
+func (r *CategoryRepository) UpdateTranslations(ctx context.Context, id uuid.UUID, nameUK, nameEN string) error {
+	return r.q.CategoryUpdateTranslations(ctx, dbq.CategoryUpdateTranslationsParams{
+		ID:     pgutil.UUIDFromGoogle(id),
+		NameUk: pgutil.TextFromString(nameUK),
+		NameEn: pgutil.TextFromString(nameEN),
+	})
 }
 
 // DeleteForUser removes a user-owned, non-default category. It returns
@@ -75,17 +102,4 @@ func (r *CategoryRepository) DeleteForUser(ctx context.Context, id, userID uuid.
 		return false, err
 	}
 	return rows > 0, nil
-}
-
-func categoryFromRow(row dbq.Category) Category {
-	return Category{
-		ID:        pgutil.UUIDToGoogle(row.ID),
-		UserID:    pgutil.UUIDToGoogle(row.UserID),
-		Name:      row.Name,
-		IconName:  row.IconName,
-		ColorHex:  row.ColorHex,
-		Type:      row.Type,
-		IsDefault: row.IsDefault,
-		CreatedAt: row.CreatedAt.Time,
-	}
 }

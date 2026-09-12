@@ -12,9 +12,9 @@ import (
 )
 
 const categoryCreate = `-- name: CategoryCreate :one
-INSERT INTO categories (user_id, name, icon_name, color_hex, type, is_default)
-VALUES ($1, $2, $3, $4, $5, false)
-RETURNING id, user_id, name, icon_name, color_hex, type, is_default, created_at
+INSERT INTO categories (user_id, name, icon_name, color_hex, type, is_default, name_uk, name_en)
+VALUES ($1, $2, $3, $4, $5, false, $6, $7)
+RETURNING id, user_id, name, icon_name, color_hex, type, is_default, name_uk, name_en, created_at
 `
 
 type CategoryCreateParams struct {
@@ -23,17 +23,34 @@ type CategoryCreateParams struct {
 	IconName string      `json:"icon_name"`
 	ColorHex string      `json:"color_hex"`
 	Type     string      `json:"type"`
+	NameUk   pgtype.Text `json:"name_uk"`
+	NameEn   pgtype.Text `json:"name_en"`
 }
 
-func (q *Queries) CategoryCreate(ctx context.Context, arg CategoryCreateParams) (Category, error) {
+type CategoryCreateRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Name      string             `json:"name"`
+	IconName  string             `json:"icon_name"`
+	ColorHex  string             `json:"color_hex"`
+	Type      string             `json:"type"`
+	IsDefault bool               `json:"is_default"`
+	NameUk    pgtype.Text        `json:"name_uk"`
+	NameEn    pgtype.Text        `json:"name_en"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CategoryCreate(ctx context.Context, arg CategoryCreateParams) (CategoryCreateRow, error) {
 	row := q.db.QueryRow(ctx, categoryCreate,
 		arg.UserID,
 		arg.Name,
 		arg.IconName,
 		arg.ColorHex,
 		arg.Type,
+		arg.NameUk,
+		arg.NameEn,
 	)
-	var i Category
+	var i CategoryCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -42,6 +59,8 @@ func (q *Queries) CategoryCreate(ctx context.Context, arg CategoryCreateParams) 
 		&i.ColorHex,
 		&i.Type,
 		&i.IsDefault,
+		&i.NameUk,
+		&i.NameEn,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -67,14 +86,27 @@ func (q *Queries) CategoryDeleteForUser(ctx context.Context, arg CategoryDeleteF
 }
 
 const categoryGetByID = `-- name: CategoryGetByID :one
-SELECT id, user_id, name, icon_name, color_hex, type, is_default, created_at
+SELECT id, user_id, name, icon_name, color_hex, type, is_default, name_uk, name_en, created_at
 FROM categories
 WHERE id = $1
 `
 
-func (q *Queries) CategoryGetByID(ctx context.Context, id pgtype.UUID) (Category, error) {
+type CategoryGetByIDRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Name      string             `json:"name"`
+	IconName  string             `json:"icon_name"`
+	ColorHex  string             `json:"color_hex"`
+	Type      string             `json:"type"`
+	IsDefault bool               `json:"is_default"`
+	NameUk    pgtype.Text        `json:"name_uk"`
+	NameEn    pgtype.Text        `json:"name_en"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CategoryGetByID(ctx context.Context, id pgtype.UUID) (CategoryGetByIDRow, error) {
 	row := q.db.QueryRow(ctx, categoryGetByID, id)
-	var i Category
+	var i CategoryGetByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -83,28 +115,43 @@ func (q *Queries) CategoryGetByID(ctx context.Context, id pgtype.UUID) (Category
 		&i.ColorHex,
 		&i.Type,
 		&i.IsDefault,
+		&i.NameUk,
+		&i.NameEn,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const categoryListForUser = `-- name: CategoryListForUser :many
-SELECT id, user_id, name, icon_name, color_hex, type, is_default, created_at
+SELECT id, user_id, name, icon_name, color_hex, type, is_default, name_uk, name_en, created_at
 FROM categories
 WHERE user_id = $1 OR is_default = true
 ORDER BY is_default DESC, name
 `
 
+type CategoryListForUserRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Name      string             `json:"name"`
+	IconName  string             `json:"icon_name"`
+	ColorHex  string             `json:"color_hex"`
+	Type      string             `json:"type"`
+	IsDefault bool               `json:"is_default"`
+	NameUk    pgtype.Text        `json:"name_uk"`
+	NameEn    pgtype.Text        `json:"name_en"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 // Returns the user's own categories plus the shared default ones.
-func (q *Queries) CategoryListForUser(ctx context.Context, userID pgtype.UUID) ([]Category, error) {
+func (q *Queries) CategoryListForUser(ctx context.Context, userID pgtype.UUID) ([]CategoryListForUserRow, error) {
 	rows, err := q.db.Query(ctx, categoryListForUser, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Category
+	var items []CategoryListForUserRow
 	for rows.Next() {
-		var i Category
+		var i CategoryListForUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -113,6 +160,8 @@ func (q *Queries) CategoryListForUser(ctx context.Context, userID pgtype.UUID) (
 			&i.ColorHex,
 			&i.Type,
 			&i.IsDefault,
+			&i.NameUk,
+			&i.NameEn,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -123,4 +172,23 @@ func (q *Queries) CategoryListForUser(ctx context.Context, userID pgtype.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const categoryUpdateTranslations = `-- name: CategoryUpdateTranslations :exec
+UPDATE categories SET name_uk = $2, name_en = $3 WHERE id = $1
+`
+
+type CategoryUpdateTranslationsParams struct {
+	ID     pgtype.UUID `json:"id"`
+	NameUk pgtype.Text `json:"name_uk"`
+	NameEn pgtype.Text `json:"name_en"`
+}
+
+// Lazily backfills name_uk/name_en for rows created before translation
+// existed (the 13 seeded defaults, or any category made before this
+// feature shipped) — self-heals on first read, no migration data backfill
+// needed.
+func (q *Queries) CategoryUpdateTranslations(ctx context.Context, arg CategoryUpdateTranslationsParams) error {
+	_, err := q.db.Exec(ctx, categoryUpdateTranslations, arg.ID, arg.NameUk, arg.NameEn)
+	return err
 }

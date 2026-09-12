@@ -17,12 +17,8 @@ type Category struct {
 	Type      string             `json:"type"`
 	IsDefault bool               `json:"is_default"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
-}
-
-type ExchangeRate struct {
-	Currency  string             `json:"currency"`
-	RateToUah pgtype.Numeric     `json:"rate_to_uah"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	NameUk    pgtype.Text        `json:"name_uk"`
+	NameEn    pgtype.Text        `json:"name_en"`
 }
 
 type MonobankConnection struct {
@@ -33,6 +29,15 @@ type MonobankConnection struct {
 	AccountID      string             `json:"account_id"`
 	ConnectedAt    pgtype.Timestamptz `json:"connected_at"`
 	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
+}
+
+type Session struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	RefreshHash string             `json:"refresh_hash"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
 }
 
 type Transaction struct {
@@ -48,9 +53,15 @@ type Transaction struct {
 }
 
 type User struct {
-	ID           pgtype.UUID        `json:"id"`
-	AppleSub     string             `json:"apple_sub"`
-	Email        pgtype.Text        `json:"email"`
-	BaseCurrency string             `json:"base_currency"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
 }

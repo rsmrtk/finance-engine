@@ -14,61 +14,422 @@ import (
 const userCreate = `-- name: UserCreate :one
 INSERT INTO users (apple_sub, email, base_currency)
 VALUES ($1, $2, $3)
-RETURNING id, apple_sub, email, base_currency, created_at
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
 `
 
 type UserCreateParams struct {
-	AppleSub     string      `json:"apple_sub"`
+	AppleSub     pgtype.Text `json:"apple_sub"`
 	Email        pgtype.Text `json:"email"`
 	BaseCurrency string      `json:"base_currency"`
 }
 
-func (q *Queries) UserCreate(ctx context.Context, arg UserCreateParams) (User, error) {
+type UserCreateRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserCreate(ctx context.Context, arg UserCreateParams) (UserCreateRow, error) {
 	row := q.db.QueryRow(ctx, userCreate, arg.AppleSub, arg.Email, arg.BaseCurrency)
-	var i User
+	var i UserCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.AppleSub,
 		&i.Email,
 		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const userCreateWithEmail = `-- name: UserCreateWithEmail :one
+INSERT INTO users (email, password_hash, base_currency)
+VALUES ($1, $2, $3)
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+`
+
+type UserCreateWithEmailParams struct {
+	Email        pgtype.Text `json:"email"`
+	PasswordHash pgtype.Text `json:"password_hash"`
+	BaseCurrency string      `json:"base_currency"`
+}
+
+type UserCreateWithEmailRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserCreateWithEmail(ctx context.Context, arg UserCreateWithEmailParams) (UserCreateWithEmailRow, error) {
+	row := q.db.QueryRow(ctx, userCreateWithEmail, arg.Email, arg.PasswordHash, arg.BaseCurrency)
+	var i UserCreateWithEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const userCreateWithGoogle = `-- name: UserCreateWithGoogle :one
+INSERT INTO users (google_sub, email, base_currency)
+VALUES ($1, $2, $3)
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+`
+
+type UserCreateWithGoogleParams struct {
+	GoogleSub    pgtype.Text `json:"google_sub"`
+	Email        pgtype.Text `json:"email"`
+	BaseCurrency string      `json:"base_currency"`
+}
+
+type UserCreateWithGoogleRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserCreateWithGoogle(ctx context.Context, arg UserCreateWithGoogleParams) (UserCreateWithGoogleRow, error) {
+	row := q.db.QueryRow(ctx, userCreateWithGoogle, arg.GoogleSub, arg.Email, arg.BaseCurrency)
+	var i UserCreateWithGoogleRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const userGetByAppleSub = `-- name: UserGetByAppleSub :one
-SELECT id, apple_sub, email, base_currency, created_at
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
 FROM users
 WHERE apple_sub = $1
 `
 
-func (q *Queries) UserGetByAppleSub(ctx context.Context, appleSub string) (User, error) {
+type UserGetByAppleSubRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserGetByAppleSub(ctx context.Context, appleSub pgtype.Text) (UserGetByAppleSubRow, error) {
 	row := q.db.QueryRow(ctx, userGetByAppleSub, appleSub)
-	var i User
+	var i UserGetByAppleSubRow
 	err := row.Scan(
 		&i.ID,
 		&i.AppleSub,
 		&i.Email,
 		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const userGetByEmail = `-- name: UserGetByEmail :one
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+FROM users
+WHERE email = $1
+`
+
+type UserGetByEmailRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserGetByEmail(ctx context.Context, email pgtype.Text) (UserGetByEmailRow, error) {
+	row := q.db.QueryRow(ctx, userGetByEmail, email)
+	var i UserGetByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const userGetByGoogleSub = `-- name: UserGetByGoogleSub :one
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+FROM users
+WHERE google_sub = $1
+`
+
+type UserGetByGoogleSubRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserGetByGoogleSub(ctx context.Context, googleSub pgtype.Text) (UserGetByGoogleSubRow, error) {
+	row := q.db.QueryRow(ctx, userGetByGoogleSub, googleSub)
+	var i UserGetByGoogleSubRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const userGetByID = `-- name: UserGetByID :one
-SELECT id, apple_sub, email, base_currency, created_at
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
 FROM users
 WHERE id = $1
 `
 
-func (q *Queries) UserGetByID(ctx context.Context, id pgtype.UUID) (User, error) {
+type UserGetByIDRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserGetByID(ctx context.Context, id pgtype.UUID) (UserGetByIDRow, error) {
 	row := q.db.QueryRow(ctx, userGetByID, id)
-	var i User
+	var i UserGetByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.AppleSub,
 		&i.Email,
 		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const userUpdateBaseCurrency = `-- name: UserUpdateBaseCurrency :one
+UPDATE users SET base_currency = $2
+WHERE id = $1
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+`
+
+type UserUpdateBaseCurrencyParams struct {
+	ID           pgtype.UUID `json:"id"`
+	BaseCurrency string      `json:"base_currency"`
+}
+
+type UserUpdateBaseCurrencyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserUpdateBaseCurrency(ctx context.Context, arg UserUpdateBaseCurrencyParams) (UserUpdateBaseCurrencyRow, error) {
+	row := q.db.QueryRow(ctx, userUpdateBaseCurrency, arg.ID, arg.BaseCurrency)
+	var i UserUpdateBaseCurrencyRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const userUpdateGoals = `-- name: UserUpdateGoals :one
+UPDATE users SET goals = $2
+WHERE id = $1
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+`
+
+type UserUpdateGoalsParams struct {
+	ID    pgtype.UUID `json:"id"`
+	Goals string      `json:"goals"`
+}
+
+type UserUpdateGoalsRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserUpdateGoals(ctx context.Context, arg UserUpdateGoalsParams) (UserUpdateGoalsRow, error) {
+	row := q.db.QueryRow(ctx, userUpdateGoals, arg.ID, arg.Goals)
+	var i UserUpdateGoalsRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const userUpdatePreferences = `-- name: UserUpdatePreferences :one
+UPDATE users SET theme = $2, gradient_color = $3
+WHERE id = $1
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+`
+
+type UserUpdatePreferencesParams struct {
+	ID            pgtype.UUID `json:"id"`
+	Theme         string      `json:"theme"`
+	GradientColor string      `json:"gradient_color"`
+}
+
+type UserUpdatePreferencesRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AppleSub      pgtype.Text        `json:"apple_sub"`
+	Email         pgtype.Text        `json:"email"`
+	BaseCurrency  string             `json:"base_currency"`
+	PasswordHash  pgtype.Text        `json:"password_hash"`
+	GoogleSub     pgtype.Text        `json:"google_sub"`
+	Theme         string             `json:"theme"`
+	GradientColor string             `json:"gradient_color"`
+	Plan          string             `json:"plan"`
+	Goals         string             `json:"goals"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UserUpdatePreferences(ctx context.Context, arg UserUpdatePreferencesParams) (UserUpdatePreferencesRow, error) {
+	row := q.db.QueryRow(ctx, userUpdatePreferences, arg.ID, arg.Theme, arg.GradientColor)
+	var i UserUpdatePreferencesRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
 		&i.CreatedAt,
 	)
 	return i, err

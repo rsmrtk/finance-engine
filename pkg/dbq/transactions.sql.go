@@ -114,3 +114,47 @@ func (q *Queries) TransactionListForUser(ctx context.Context, arg TransactionLis
 	}
 	return items, nil
 }
+
+const transactionUpdateForUser = `-- name: TransactionUpdateForUser :one
+UPDATE transactions
+SET category_id = $3, amount = $4, currency = $5, type = $6, date = $7, note = $8
+WHERE id = $1 AND user_id = $2
+RETURNING id, user_id, category_id, amount, currency, type, date, note, created_at
+`
+
+type TransactionUpdateForUserParams struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	CategoryID pgtype.UUID        `json:"category_id"`
+	Amount     pgtype.Numeric     `json:"amount"`
+	Currency   string             `json:"currency"`
+	Type       string             `json:"type"`
+	Date       pgtype.Timestamptz `json:"date"`
+	Note       string             `json:"note"`
+}
+
+func (q *Queries) TransactionUpdateForUser(ctx context.Context, arg TransactionUpdateForUserParams) (Transaction, error) {
+	row := q.db.QueryRow(ctx, transactionUpdateForUser,
+		arg.ID,
+		arg.UserID,
+		arg.CategoryID,
+		arg.Amount,
+		arg.Currency,
+		arg.Type,
+		arg.Date,
+		arg.Note,
+	)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CategoryID,
+		&i.Amount,
+		&i.Currency,
+		&i.Type,
+		&i.Date,
+		&i.Note,
+		&i.CreatedAt,
+	)
+	return i, err
+}

@@ -71,14 +71,16 @@ kind-migrate: ## Run the migration Job against the in-cluster Postgres.
 kind-deploy: kind-build ## Apply all manifests, run migrations, deploy the API.
 	kubectl apply -f $(K8S_DIR)/00-namespace.yaml
 	kubectl apply -f $(K8S_DIR)/10-postgres.yaml
+	kubectl apply -f $(K8S_DIR)/12-redis.yaml
 	kubectl -n $(K8S_NS) rollout status deployment/postgres --timeout=90s
+	kubectl -n $(K8S_NS) rollout status deployment/redis --timeout=60s
 	$(MAKE) kind-migrate
 	kubectl apply -f $(K8S_DIR)/30-backend.yaml
 	kubectl -n $(K8S_NS) rollout status deployment/finance-engine-api --timeout=60s
 
-kind-redeploy: ## Rebuild the API image and roll the Deployment (after a code change).
-	docker build -f deployments/Dockerfile -t finance-engine:local .
-	kind load docker-image finance-engine:local --name $(KIND_CLUSTER)
+kind-redeploy: kind-build ## Rebuild images, run any new migrations, reapply manifests (env/config changes included), and roll the Deployment.
+	$(MAKE) kind-migrate
+	kubectl apply -f $(K8S_DIR)/30-backend.yaml
 	kubectl -n $(K8S_NS) rollout restart deployment/finance-engine-api
 	kubectl -n $(K8S_NS) rollout status deployment/finance-engine-api --timeout=60s
 

@@ -11,25 +11,40 @@ import (
 )
 
 type Querier interface {
-	CategoryCreate(ctx context.Context, arg CategoryCreateParams) (Category, error)
+	CategoryCreate(ctx context.Context, arg CategoryCreateParams) (CategoryCreateRow, error)
 	// Only deletes a category owned by the user; default categories can't be deleted this way.
 	CategoryDeleteForUser(ctx context.Context, arg CategoryDeleteForUserParams) (int64, error)
-	CategoryGetByID(ctx context.Context, id pgtype.UUID) (Category, error)
+	CategoryGetByID(ctx context.Context, id pgtype.UUID) (CategoryGetByIDRow, error)
 	// Returns the user's own categories plus the shared default ones.
-	CategoryListForUser(ctx context.Context, userID pgtype.UUID) ([]Category, error)
+	CategoryListForUser(ctx context.Context, userID pgtype.UUID) ([]CategoryListForUserRow, error)
+	// Lazily backfills name_uk/name_en for rows created before translation
+	// existed (the 13 seeded defaults, or any category made before this
+	// feature shipped) — self-heals on first read, no migration data backfill
+	// needed.
+	CategoryUpdateTranslations(ctx context.Context, arg CategoryUpdateTranslationsParams) error
 	MonobankConnectionDelete(ctx context.Context, userID pgtype.UUID) error
 	MonobankConnectionGetByUserID(ctx context.Context, userID pgtype.UUID) (MonobankConnection, error)
 	MonobankConnectionGetByWebhookSecret(ctx context.Context, webhookSecret string) (MonobankConnection, error)
 	MonobankConnectionTouchSync(ctx context.Context, userID pgtype.UUID) error
 	MonobankConnectionUpsert(ctx context.Context, arg MonobankConnectionUpsertParams) (MonobankConnection, error)
-	RateList(ctx context.Context) ([]ExchangeRate, error)
-	RateUpsert(ctx context.Context, arg RateUpsertParams) error
+	SessionCreate(ctx context.Context, arg SessionCreateParams) (Session, error)
+	SessionGetByRefreshHash(ctx context.Context, refreshHash string) (Session, error)
+	SessionRevokeByID(ctx context.Context, id pgtype.UUID) error
+	SessionRevokeByRefreshHash(ctx context.Context, refreshHash string) error
 	TransactionCreate(ctx context.Context, arg TransactionCreateParams) (Transaction, error)
 	TransactionDeleteForUser(ctx context.Context, arg TransactionDeleteForUserParams) (int64, error)
 	TransactionListForUser(ctx context.Context, arg TransactionListForUserParams) ([]Transaction, error)
-	UserCreate(ctx context.Context, arg UserCreateParams) (User, error)
-	UserGetByAppleSub(ctx context.Context, appleSub string) (User, error)
-	UserGetByID(ctx context.Context, id pgtype.UUID) (User, error)
+	TransactionUpdateForUser(ctx context.Context, arg TransactionUpdateForUserParams) (Transaction, error)
+	UserCreate(ctx context.Context, arg UserCreateParams) (UserCreateRow, error)
+	UserCreateWithEmail(ctx context.Context, arg UserCreateWithEmailParams) (UserCreateWithEmailRow, error)
+	UserCreateWithGoogle(ctx context.Context, arg UserCreateWithGoogleParams) (UserCreateWithGoogleRow, error)
+	UserGetByAppleSub(ctx context.Context, appleSub pgtype.Text) (UserGetByAppleSubRow, error)
+	UserGetByEmail(ctx context.Context, email pgtype.Text) (UserGetByEmailRow, error)
+	UserGetByGoogleSub(ctx context.Context, googleSub pgtype.Text) (UserGetByGoogleSubRow, error)
+	UserGetByID(ctx context.Context, id pgtype.UUID) (UserGetByIDRow, error)
+	UserUpdateBaseCurrency(ctx context.Context, arg UserUpdateBaseCurrencyParams) (UserUpdateBaseCurrencyRow, error)
+	UserUpdateGoals(ctx context.Context, arg UserUpdateGoalsParams) (UserUpdateGoalsRow, error)
+	UserUpdatePreferences(ctx context.Context, arg UserUpdatePreferencesParams) (UserUpdatePreferencesRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

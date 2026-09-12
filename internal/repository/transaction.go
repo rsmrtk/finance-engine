@@ -76,6 +76,41 @@ func (r *TransactionRepository) Create(ctx context.Context, p CreateTransactionP
 	return transactionFromRow(row), nil
 }
 
+type UpdateTransactionParams struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	CategoryID uuid.UUID
+	Amount     string
+	Currency   string
+	Type       string
+	Date       time.Time
+	Note       string
+}
+
+// UpdateForUser returns pgx.ErrNoRows if the transaction doesn't exist or
+// doesn't belong to userID — callers shouldn't be able to tell those two
+// cases apart (same as every other user-scoped mutation in this repo).
+func (r *TransactionRepository) UpdateForUser(ctx context.Context, p UpdateTransactionParams) (Transaction, error) {
+	amount, err := pgutil.NumericFromString(p.Amount)
+	if err != nil {
+		return Transaction{}, err
+	}
+	row, err := r.q.TransactionUpdateForUser(ctx, dbq.TransactionUpdateForUserParams{
+		ID:         pgutil.UUIDFromGoogle(p.ID),
+		UserID:     pgutil.UUIDFromGoogle(p.UserID),
+		CategoryID: pgutil.NullUUIDFromGoogle(p.CategoryID),
+		Amount:     amount,
+		Currency:   p.Currency,
+		Type:       p.Type,
+		Date:       pgutil.TimeFromGo(p.Date),
+		Note:       p.Note,
+	})
+	if err != nil {
+		return Transaction{}, err
+	}
+	return transactionFromRow(row), nil
+}
+
 func (r *TransactionRepository) DeleteForUser(ctx context.Context, id, userID uuid.UUID) (bool, error) {
 	rows, err := r.q.TransactionDeleteForUser(ctx, dbq.TransactionDeleteForUserParams{
 		ID:     pgutil.UUIDFromGoogle(id),

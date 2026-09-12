@@ -10,20 +10,24 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/rsmrtk/finance-engine/internal/config"
 	grpcserver "github.com/rsmrtk/finance-engine/internal/grpc"
 	"github.com/rsmrtk/finance-engine/internal/ratesync"
 	"github.com/rsmrtk/finance-engine/internal/repository"
+	"github.com/rsmrtk/finance-engine/internal/rest"
 	authsvc "github.com/rsmrtk/finance-engine/internal/service/auth"
 	categorysvc "github.com/rsmrtk/finance-engine/internal/service/category"
 	monobanksvc "github.com/rsmrtk/finance-engine/internal/service/monobank"
 	ratesvc "github.com/rsmrtk/finance-engine/internal/service/rate"
+	sessionsvc "github.com/rsmrtk/finance-engine/internal/service/session"
 	transactionsvc "github.com/rsmrtk/finance-engine/internal/service/transaction"
 	"github.com/rsmrtk/finance-engine/internal/webhook"
 	"github.com/rsmrtk/finance-engine/pkg/appleauth"
 	"github.com/rsmrtk/finance-engine/pkg/cryptobox"
 	"github.com/rsmrtk/finance-engine/pkg/dbq"
+	"github.com/rsmrtk/finance-engine/pkg/googleauth"
 	"github.com/rsmrtk/finance-engine/pkg/jwt"
 	"github.com/rsmrtk/finance-engine/pkg/logger"
 	"github.com/rsmrtk/finance-engine/pkg/monobank"
@@ -52,6 +56,9 @@ func run() error {
 	if cfg.PublicBaseURL == "" {
 		log.Info("PUBLIC_BASE_URL is not set: Monobank connect will be unavailable until this points at a public HTTPS URL.", nil)
 	}
+	if cfg.GoogleClientID == "" {
+		log.Info("GOOGLE_CLIENT_ID is not set: /api/auth/google will reject every request until it's configured.", nil)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -64,14 +71,29 @@ func run() error {
 
 	queries := dbq.New(pool)
 
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("connect to redis: %w", err)
+	}
+	defer redisClient.Close()
+
 	userRepo := repository.NewUserRepository(queries)
 	categoryRepo := repository.NewCategoryRepository(queries)
 	transactionRepo := repository.NewTransactionRepository(queries)
-	rateRepo := repository.NewRateRepository(queries)
+	rateRepo := repository.NewRateRepository(redisClient)
 	monobankRepo := repository.NewMonobankRepository(queries)
+	sessionRepo := repository.NewSessionRepository(queries)
 
+	// gRPC/iOS keeps its single long-lived JWT (no refresh, matches how the
+	// app has always worked). The web gets a short-lived access JWT plus a
+	// separate, revocable DB-backed refresh token (internal/service/session)
+	// — both instances share the same secret, so either can verify tokens
+	// the other minted; only the embedded expiry (via Generate) differs.
 	jwtManager := jwt.New(cfg.JWTSecret, cfg.JWTDuration)
+	webAccessJWT := jwt.New(cfg.JWTSecret, cfg.JWTWebAccessDuration)
 	appleVerifier := appleauth.NewVerifier(cfg.AppleBundleID)
+	googleVerifier := googleauth.NewVerifier(cfg.GoogleClientID)
+	sessionService := sessionsvc.New(sessionRepo, webAccessJWT, cfg.SessionRefreshDuration)
 
 	tokenBox, err := cryptobox.New(cfg.MonobankTokenKey)
 	if err != nil {
@@ -81,7 +103,7 @@ func run() error {
 	monobankService := monobanksvc.New(monobankRepo, monobankClient, tokenBox, cfg.PublicBaseURL)
 
 	services := grpcserver.Services{
-		Auth:        authsvc.New(userRepo, appleVerifier, jwtManager, cfg.DevMode),
+		Auth:        authsvc.New(userRepo, appleVerifier, googleVerifier, jwtManager, cfg.DevMode),
 		Category:    categorysvc.New(categoryRepo),
 		Transaction: transactionsvc.New(transactionRepo, categoryRepo),
 		Rate:        ratesvc.New(rateRepo),
@@ -103,6 +125,17 @@ func run() error {
 	monobankWebhook := webhook.NewMonobankHandler(monobankRepo, transactionRepo, categoryRepo, log)
 	webhookMux := http.NewServeMux()
 	webhookMux.Handle("/webhooks/monobank/", monobankWebhook)
+	// The web frontend's JSON API rides on this same plain-HTTP server —
+	// it's already the one port a browser (or Render/kind) can reach
+	// without speaking gRPC, so there's no need for a second listener.
+	webhookMux.Handle("/api/", rest.NewMux(rest.Options{
+		Services:      services,
+		Sessions:      sessionService,
+		JWT:           webAccessJWT,
+		CORSOrigin:    cfg.CORSAllowedOrigin,
+		AccessMaxAge:  cfg.JWTWebAccessDuration,
+		RefreshMaxAge: cfg.SessionRefreshDuration,
+	}))
 	webhookServer := &http.Server{Addr: cfg.WebhookAddress, Handler: webhookMux}
 
 	errCh := make(chan error, 2)
