@@ -35,6 +35,8 @@ func NewMux(o Options) http.Handler {
 	mux.HandleFunc("PATCH /api/auth/preferences", withAuth(o.JWT, auth.updatePreferences))
 	mux.HandleFunc("PATCH /api/auth/goals", withAuth(o.JWT, auth.updateGoals))
 	mux.HandleFunc("PATCH /api/auth/currency", withAuth(o.JWT, auth.updateCurrency))
+	mux.HandleFunc("GET /api/auth/sessions", withAuth(o.JWT, auth.listSessions))
+	mux.HandleFunc("DELETE /api/auth/sessions/{id}", withAuth(o.JWT, auth.revokeSession))
 
 	categories := newCategoryHandler(o.Services.Category)
 	mux.HandleFunc("GET /api/categories", withAuth(o.JWT, categories.list))

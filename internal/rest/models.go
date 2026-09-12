@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/rsmrtk/finance-engine/internal/repository"
+	sessionsvc "github.com/rsmrtk/finance-engine/internal/service/session"
 )
 
 // timeLayout matches internal/grpc/controllers/convert.go's timeLayout —
@@ -83,6 +84,22 @@ type monobankConnectionJSON struct {
 	MaskedPan    string `json:"maskedPan"`
 	ConnectedAt  string `json:"connectedAt,omitempty"`
 	LastSyncedAt string `json:"lastSyncedAt,omitempty"`
+}
+
+type sessionJSON struct {
+	ID        string `json:"id"`
+	UserAgent string `json:"userAgent"`
+	CreatedAt string `json:"createdAt"`
+	ExpiresAt string `json:"expiresAt"`
+	Current   bool   `json:"current"`
+}
+
+func sessionToJSON(s sessionsvc.Active) sessionJSON {
+	return sessionJSON{
+		ID: s.ID.String(), UserAgent: s.UserAgent,
+		CreatedAt: s.CreatedAt.Format(timeLayout), ExpiresAt: s.ExpiresAt.Format(timeLayout),
+		Current: s.Current,
+	}
 }
 
 func formatOptionalTime(t time.Time) string {

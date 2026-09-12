@@ -12,19 +12,25 @@ import (
 )
 
 const sessionCreate = `-- name: SessionCreate :one
-INSERT INTO sessions (user_id, refresh_hash, expires_at)
-VALUES ($1, $2, $3)
-RETURNING id, user_id, refresh_hash, created_at, expires_at, revoked_at
+INSERT INTO sessions (user_id, refresh_hash, expires_at, user_agent)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, refresh_hash, created_at, expires_at, revoked_at, user_agent
 `
 
 type SessionCreateParams struct {
 	UserID      pgtype.UUID        `json:"user_id"`
 	RefreshHash string             `json:"refresh_hash"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	UserAgent   string             `json:"user_agent"`
 }
 
 func (q *Queries) SessionCreate(ctx context.Context, arg SessionCreateParams) (Session, error) {
-	row := q.db.QueryRow(ctx, sessionCreate, arg.UserID, arg.RefreshHash, arg.ExpiresAt)
+	row := q.db.QueryRow(ctx, sessionCreate,
+		arg.UserID,
+		arg.RefreshHash,
+		arg.ExpiresAt,
+		arg.UserAgent,
+	)
 	var i Session
 	err := row.Scan(
 		&i.ID,
@@ -33,12 +39,13 @@ func (q *Queries) SessionCreate(ctx context.Context, arg SessionCreateParams) (S
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.UserAgent,
 	)
 	return i, err
 }
 
 const sessionGetByRefreshHash = `-- name: SessionGetByRefreshHash :one
-SELECT id, user_id, refresh_hash, created_at, expires_at, revoked_at
+SELECT id, user_id, refresh_hash, created_at, expires_at, revoked_at, user_agent
 FROM sessions
 WHERE refresh_hash = $1
 `
@@ -53,8 +60,44 @@ func (q *Queries) SessionGetByRefreshHash(ctx context.Context, refreshHash strin
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.UserAgent,
 	)
 	return i, err
+}
+
+const sessionListActiveForUser = `-- name: SessionListActiveForUser :many
+SELECT id, user_id, refresh_hash, created_at, expires_at, revoked_at, user_agent
+FROM sessions
+WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+ORDER BY created_at DESC
+`
+
+func (q *Queries) SessionListActiveForUser(ctx context.Context, userID pgtype.UUID) ([]Session, error) {
+	rows, err := q.db.Query(ctx, sessionListActiveForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Session
+	for rows.Next() {
+		var i Session
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.RefreshHash,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.RevokedAt,
+			&i.UserAgent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const sessionRevokeByID = `-- name: SessionRevokeByID :exec
@@ -73,4 +116,22 @@ UPDATE sessions SET revoked_at = now() WHERE refresh_hash = $1
 func (q *Queries) SessionRevokeByRefreshHash(ctx context.Context, refreshHash string) error {
 	_, err := q.db.Exec(ctx, sessionRevokeByRefreshHash, refreshHash)
 	return err
+}
+
+const sessionRevokeForUser = `-- name: SessionRevokeForUser :execrows
+UPDATE sessions SET revoked_at = now()
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+`
+
+type SessionRevokeForUserParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) SessionRevokeForUser(ctx context.Context, arg SessionRevokeForUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sessionRevokeForUser, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

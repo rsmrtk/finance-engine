@@ -29,8 +29,10 @@ type Querier interface {
 	MonobankConnectionUpsert(ctx context.Context, arg MonobankConnectionUpsertParams) (MonobankConnection, error)
 	SessionCreate(ctx context.Context, arg SessionCreateParams) (Session, error)
 	SessionGetByRefreshHash(ctx context.Context, refreshHash string) (Session, error)
+	SessionListActiveForUser(ctx context.Context, userID pgtype.UUID) ([]Session, error)
 	SessionRevokeByID(ctx context.Context, id pgtype.UUID) error
 	SessionRevokeByRefreshHash(ctx context.Context, refreshHash string) error
+	SessionRevokeForUser(ctx context.Context, arg SessionRevokeForUserParams) (int64, error)
 	TransactionCreate(ctx context.Context, arg TransactionCreateParams) (Transaction, error)
 	TransactionDeleteForUser(ctx context.Context, arg TransactionDeleteForUserParams) (int64, error)
 	TransactionListForUser(ctx context.Context, arg TransactionListForUserParams) ([]Transaction, error)

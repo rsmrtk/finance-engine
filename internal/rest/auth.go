@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	authsvc "github.com/rsmrtk/finance-engine/internal/service/auth"
 	sessionsvc "github.com/rsmrtk/finance-engine/internal/service/session"
 )
@@ -166,6 +168,38 @@ func (h *authHandler) refresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (h *authHandler) listSessions(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r.Context())
+	rawRefresh := ""
+	if cookie, err := r.Cookie(refreshCookieName); err == nil {
+		rawRefresh = cookie.Value
+	}
+	sessions, err := h.sessions.ListActive(r.Context(), userID, rawRefresh)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load sessions")
+		return
+	}
+	out := make([]sessionJSON, len(sessions))
+	for i, s := range sessions {
+		out[i] = sessionToJSON(s)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": out})
+}
+
+func (h *authHandler) revokeSession(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r.Context())
+	sessionID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid session id")
+		return
+	}
+	if err := h.sessions.RevokeForUser(r.Context(), userID, sessionID); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(refreshCookieName); err == nil {
 		_ = h.sessions.Revoke(r.Context(), cookie.Value)
@@ -175,7 +209,7 @@ func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *authHandler) issueAndRespond(w http.ResponseWriter, r *http.Request, result authsvc.SignInResult) {
-	pair, err := h.sessions.Issue(r.Context(), result.User.ID)
+	pair, err := h.sessions.Issue(r.Context(), result.User.ID, r.Header.Get("User-Agent"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create session")
 		return
