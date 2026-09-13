@@ -2,24 +2,28 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/rsmrtk/finance-engine/pkg/dbq"
 	"github.com/rsmrtk/finance-engine/pkg/pgutil"
 )
 
 type Transaction struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	CategoryID uuid.UUID // uuid.Nil if uncategorized.
-	Amount     string    // Decimal as string, e.g. "350.00".
-	Currency   string
-	Type       string // "expense" or "income".
-	Date       time.Time
-	Note       string
-	CreatedAt  time.Time
+	ID                 uuid.UUID
+	UserID             uuid.UUID
+	CategoryID         uuid.UUID // uuid.Nil if uncategorized.
+	Amount             string    // Decimal as string, e.g. "350.00".
+	Currency           string
+	Type               string // "expense" or "income".
+	Date               time.Time
+	Note               string
+	CreatedAt          time.Time
+	IsInternalTransfer bool   // Money moved between the user's own accounts — not real income/expense.
+	ExternalID         string // Monobank's statementItem.id — "" for manually-entered transactions.
 }
 
 type TransactionRepository struct {
@@ -74,6 +78,80 @@ func (r *TransactionRepository) Create(ctx context.Context, p CreateTransactionP
 		return Transaction{}, err
 	}
 	return transactionFromRow(row), nil
+}
+
+type CreateTransactionWithExternalIDParams struct {
+	UserID             uuid.UUID
+	CategoryID         uuid.UUID
+	Amount             string
+	Currency           string
+	Type               string
+	Date               time.Time
+	Note               string
+	ExternalID         string // Monobank's statementItem.id — never empty for this path.
+	IsInternalTransfer bool   // Set when the description itself gives it away (e.g. a jar top-up).
+}
+
+// CreateWithExternalID is Create for Monobank imports (webhook + manual
+// sync) — safe to call twice with the same ExternalID: the second call
+// returns created=false instead of a duplicate row or an error.
+func (r *TransactionRepository) CreateWithExternalID(ctx context.Context, p CreateTransactionWithExternalIDParams) (tx Transaction, created bool, err error) {
+	amount, err := pgutil.NumericFromString(p.Amount)
+	if err != nil {
+		return Transaction{}, false, err
+	}
+	row, err := r.q.TransactionCreateWithExternalID(ctx, dbq.TransactionCreateWithExternalIDParams{
+		UserID:             pgutil.UUIDFromGoogle(p.UserID),
+		CategoryID:         pgutil.NullUUIDFromGoogle(p.CategoryID),
+		Amount:             amount,
+		Currency:           p.Currency,
+		Type:               p.Type,
+		Date:               pgutil.TimeFromGo(p.Date),
+		Note:               p.Note,
+		ExternalID:         p.ExternalID,
+		IsInternalTransfer: p.IsInternalTransfer,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Transaction{}, false, nil // Already imported — not an error.
+		}
+		return Transaction{}, false, err
+	}
+	return transactionFromRow(row), true, nil
+}
+
+// FindTransferMatch looks for the other side of an internal transfer:
+// same user, opposite type, exact same amount+currency, another
+// Monobank-imported transaction not already flagged, within
+// [windowStart, windowEnd]. ok is false if nothing matched.
+func (r *TransactionRepository) FindTransferMatch(
+	ctx context.Context,
+	userID uuid.UUID,
+	oppositeType, amount string,
+	windowStart, windowEnd time.Time,
+) (Transaction, bool, error) {
+	numAmount, err := pgutil.NumericFromString(amount)
+	if err != nil {
+		return Transaction{}, false, err
+	}
+	row, err := r.q.TransactionFindTransferMatch(ctx, dbq.TransactionFindTransferMatchParams{
+		UserID: pgutil.UUIDFromGoogle(userID),
+		Type:   oppositeType,
+		Amount: numAmount,
+		Date:   pgutil.TimeFromGo(windowStart),
+		Date_2: pgutil.TimeFromGo(windowEnd),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Transaction{}, false, nil
+		}
+		return Transaction{}, false, err
+	}
+	return transactionFromRow(row), true, nil
+}
+
+func (r *TransactionRepository) MarkInternalTransfer(ctx context.Context, id uuid.UUID) error {
+	return r.q.TransactionMarkInternalTransfer(ctx, pgutil.UUIDFromGoogle(id))
 }
 
 type UpdateTransactionParams struct {
@@ -139,14 +217,16 @@ func (r *TransactionRepository) DeleteExpiredForPlan(ctx context.Context, planNa
 
 func transactionFromRow(row dbq.Transaction) Transaction {
 	return Transaction{
-		ID:         pgutil.UUIDToGoogle(row.ID),
-		UserID:     pgutil.UUIDToGoogle(row.UserID),
-		CategoryID: pgutil.UUIDToGoogle(row.CategoryID),
-		Amount:     pgutil.NumericToString(row.Amount),
-		Currency:   row.Currency,
-		Type:       row.Type,
-		Date:       row.Date.Time,
-		Note:       row.Note,
-		CreatedAt:  row.CreatedAt.Time,
+		ID:                 pgutil.UUIDToGoogle(row.ID),
+		UserID:             pgutil.UUIDToGoogle(row.UserID),
+		CategoryID:         pgutil.UUIDToGoogle(row.CategoryID),
+		Amount:             pgutil.NumericToString(row.Amount),
+		Currency:           row.Currency,
+		Type:               row.Type,
+		Date:               row.Date.Time,
+		Note:               row.Note,
+		CreatedAt:          row.CreatedAt.Time,
+		IsInternalTransfer: row.IsInternalTransfer,
+		ExternalID:         row.ExternalID,
 	}
 }

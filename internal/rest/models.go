@@ -54,13 +54,14 @@ func categoryToJSON(c repository.Category) categoryJSON {
 }
 
 type transactionJSON struct {
-	ID         string `json:"id"`
-	Amount     string `json:"amount"` // Decimal as string — see repository.Transaction.
-	Currency   string `json:"currency"`
-	Type       string `json:"type"`
-	Date       string `json:"date"`
-	Note       string `json:"note"`
-	CategoryID string `json:"categoryId"`
+	ID                 string `json:"id"`
+	Amount             string `json:"amount"` // Decimal as string — see repository.Transaction.
+	Currency           string `json:"currency"`
+	Type               string `json:"type"`
+	Date               string `json:"date"`
+	Note               string `json:"note"`
+	CategoryID         string `json:"categoryId"`
+	IsInternalTransfer bool   `json:"isInternalTransfer,omitempty"`
 }
 
 func transactionToJSON(t repository.Transaction) transactionJSON {
@@ -71,6 +72,7 @@ func transactionToJSON(t repository.Transaction) transactionJSON {
 	return transactionJSON{
 		ID: t.ID.String(), Amount: t.Amount, Currency: t.Currency, Type: t.Type,
 		Date: t.Date.Format(timeLayout), Note: t.Note, CategoryID: categoryID,
+		IsInternalTransfer: t.IsInternalTransfer,
 	}
 }
 

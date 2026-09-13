@@ -55,15 +55,17 @@ type Session struct {
 }
 
 type Transaction struct {
-	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	CategoryID pgtype.UUID        `json:"category_id"`
-	Amount     pgtype.Numeric     `json:"amount"`
-	Currency   string             `json:"currency"`
-	Type       string             `json:"type"`
-	Date       pgtype.Timestamptz `json:"date"`
-	Note       string             `json:"note"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	CategoryID         pgtype.UUID        `json:"category_id"`
+	Amount             pgtype.Numeric     `json:"amount"`
+	Currency           string             `json:"currency"`
+	Type               string             `json:"type"`
+	Date               pgtype.Timestamptz `json:"date"`
+	Note               string             `json:"note"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ExternalID         string             `json:"external_id"`
+	IsInternalTransfer bool               `json:"is_internal_transfer"`
 }
 
 type User struct {

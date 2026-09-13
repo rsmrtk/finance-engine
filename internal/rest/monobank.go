@@ -156,6 +156,30 @@ func (h *monobankHandler) updateAccounts(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, statusToJSON(status))
 }
 
+// sync pulls recent transactions directly from Monobank instead of
+// waiting for a webhook push — the recovery path when the local dev
+// machine was asleep/offline and missed a real-time delivery.
+func (h *monobankHandler) sync(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r.Context())
+	user, err := h.auth.Me(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "not signed in")
+		return
+	}
+	if !plan.AllowsMonobank(user.Plan) {
+		writeError(w, http.StatusForbidden, "Monobank sync is available on the Max plan")
+		return
+	}
+	imported, reclassified, err := h.service.SyncNow(r.Context(), userID)
+	if err != nil {
+		h.log.Error("monobank sync failed", logger.H{"userId": userID.String(), "error": err.Error()})
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.log.Info("monobank sync completed", logger.H{"userId": userID.String(), "imported": imported, "reclassified": reclassified})
+	writeJSON(w, http.StatusOK, map[string]int{"imported": imported, "reclassified": reclassified})
+}
+
 func (h *monobankHandler) status(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromContext(r.Context())
 	status, err := h.service.Status(r.Context(), userID)

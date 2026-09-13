@@ -64,6 +64,39 @@ func (c *Client) ClientInfo(ctx context.Context, personalToken string) (*ClientI
 	return &info, nil
 }
 
+// Statement fetches an account's transaction history directly (as
+// opposed to waiting for a webhook push) — the fallback for catching up
+// on whatever a webhook missed while our server was unreachable (e.g.
+// the dev machine was asleep). Monobank caps the range at 31 days and
+// rate-limits this endpoint the same way as ClientInfo (~1 request per
+// token per 60 seconds) — callers syncing several accounts must space
+// the calls out themselves.
+func (c *Client) Statement(ctx context.Context, personalToken, accountID string, from, to time.Time) ([]StatementItem, error) {
+	url := fmt.Sprintf("%s/personal/statement/%s/%d/%d", baseURL, accountID, from.Unix(), to.Unix())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("X-Token", personalToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("call monobank: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("monobank returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var items []StatementItem
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("decode statement: %w", err)
+	}
+	return items, nil
+}
+
 // SetWebHook registers the URL Monobank will POST new transactions to.
 func (c *Client) SetWebHook(ctx context.Context, personalToken, webhookURL string) error {
 	payload, err := json.Marshal(map[string]string{"webHookUrl": webhookURL})

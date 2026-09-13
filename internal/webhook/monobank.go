@@ -11,22 +11,19 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/rsmrtk/finance-engine/internal/monobankimport"
 	"github.com/rsmrtk/finance-engine/internal/repository"
 	"github.com/rsmrtk/finance-engine/pkg/logger"
-	"github.com/rsmrtk/finance-engine/pkg/mcc"
 	"github.com/rsmrtk/finance-engine/pkg/monobank"
 )
 
 type MonobankHandler struct {
-	connections  *repository.MonobankRepository
-	transactions *repository.TransactionRepository
-	categories   *repository.CategoryRepository
-	log          logger.Logger
+	connections *repository.MonobankRepository
+	importer    *monobankimport.Importer
+	log         logger.Logger
 }
 
 func NewMonobankHandler(
@@ -35,7 +32,7 @@ func NewMonobankHandler(
 	categories *repository.CategoryRepository,
 	log logger.Logger,
 ) *MonobankHandler {
-	return &MonobankHandler{connections: connections, transactions: transactions, categories: categories, log: log}
+	return &MonobankHandler{connections: connections, importer: monobankimport.New(transactions, categories, log), log: log}
 }
 
 // ServeHTTP handles POST /webhooks/monobank/{secret}. The secret is an
@@ -89,64 +86,10 @@ func (h *MonobankHandler) process(ctx context.Context, secret string, payload mo
 	if !slices.Contains(conn.AccountIDs, payload.Data.Account) {
 		return nil // An account on the same token the user didn't select to track.
 	}
-	if item.Amount == 0 {
-		return nil
-	}
 
-	transactionType := "income"
-	amount := item.Amount
-	if amount < 0 {
-		transactionType = "expense"
-		amount = -amount
-	}
-
-	h.log.Info("processing monobank transaction", logger.H{
-		"mcc":          item.MCC,
-		"currencyCode": item.CurrencyCode,
-		"account":      payload.Data.Account,
-		"description":  item.Description,
-	})
-
-	categoryID := uuid.Nil
-	name := mcc.CategoryName(item.MCC)
-	if name == "" && transactionType == "expense" {
-		// No MCC match (common for transfers/top-ups, which carry no MCC
-		// at all) — fall back to the catch-all category instead of
-		// leaving it blank, so there's at least something to filter/sort
-		// by without the user having to touch every single import.
-		name = "Інше"
-	}
-	if name != "" {
-		if category, ok := h.findCategory(ctx, conn.UserID, name, transactionType); ok {
-			categoryID = category
-		}
-	}
-
-	_, err = h.transactions.Create(ctx, repository.CreateTransactionParams{
-		UserID:     conn.UserID,
-		CategoryID: categoryID,
-		Amount:     fmt.Sprintf("%d.%02d", amount/100, amount%100),
-		Currency:   monobank.CurrencyCode(item.CurrencyCode),
-		Type:       transactionType,
-		Date:       time.Unix(item.Time, 0),
-		Note:       item.Description,
-	})
-	if err != nil {
-		return fmt.Errorf("create transaction: %w", err)
+	if _, err := h.importer.Item(ctx, conn.UserID, item); err != nil {
+		return err
 	}
 
 	return h.connections.TouchSync(ctx, conn.UserID)
-}
-
-func (h *MonobankHandler) findCategory(ctx context.Context, userID uuid.UUID, name, transactionType string) (uuid.UUID, bool) {
-	categories, err := h.categories.ListForUser(ctx, userID)
-	if err != nil {
-		return uuid.Nil, false
-	}
-	for _, category := range categories {
-		if strings.EqualFold(strings.TrimSpace(category.Name), name) && category.Type == transactionType {
-			return category.ID, true
-		}
-	}
-	return uuid.Nil, false
 }

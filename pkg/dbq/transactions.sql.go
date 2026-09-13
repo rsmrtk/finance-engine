@@ -25,7 +25,7 @@ func (q *Queries) TransactionCountForUser(ctx context.Context, userID pgtype.UUI
 const transactionCreate = `-- name: TransactionCreate :one
 INSERT INTO transactions (user_id, category_id, amount, currency, type, date, note)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, category_id, amount, currency, type, date, note, created_at
+RETURNING id, user_id, category_id, amount, currency, type, date, note, created_at, external_id, is_internal_transfer
 `
 
 type TransactionCreateParams struct {
@@ -59,6 +59,65 @@ func (q *Queries) TransactionCreate(ctx context.Context, arg TransactionCreatePa
 		&i.Date,
 		&i.Note,
 		&i.CreatedAt,
+		&i.ExternalID,
+		&i.IsInternalTransfer,
+	)
+	return i, err
+}
+
+const transactionCreateWithExternalID = `-- name: TransactionCreateWithExternalID :one
+INSERT INTO transactions (user_id, category_id, amount, currency, type, date, note, external_id, is_internal_transfer)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (user_id, external_id) WHERE external_id <> '' DO NOTHING
+RETURNING id, user_id, category_id, amount, currency, type, date, note, created_at, external_id, is_internal_transfer
+`
+
+type TransactionCreateWithExternalIDParams struct {
+	UserID             pgtype.UUID        `json:"user_id"`
+	CategoryID         pgtype.UUID        `json:"category_id"`
+	Amount             pgtype.Numeric     `json:"amount"`
+	Currency           string             `json:"currency"`
+	Type               string             `json:"type"`
+	Date               pgtype.Timestamptz `json:"date"`
+	Note               string             `json:"note"`
+	ExternalID         string             `json:"external_id"`
+	IsInternalTransfer bool               `json:"is_internal_transfer"`
+}
+
+// Used by Monobank imports (webhook + manual "sync now" backfill) —
+// ON CONFLICT DO NOTHING makes re-importing the same statement item a
+// harmless no-op instead of a duplicate row. No rows returned means it
+// already existed; the caller treats pgx.ErrNoRows as "skipped", not a
+// failure. is_internal_transfer is set at creation only when the
+// description itself gives it away (e.g. a jar top-up) — the other
+// detection path (matching against a same-amount opposite-type
+// transaction on a different tracked account) runs after creation, see
+// TransactionFindTransferMatch + TransactionMarkInternalTransfer.
+func (q *Queries) TransactionCreateWithExternalID(ctx context.Context, arg TransactionCreateWithExternalIDParams) (Transaction, error) {
+	row := q.db.QueryRow(ctx, transactionCreateWithExternalID,
+		arg.UserID,
+		arg.CategoryID,
+		arg.Amount,
+		arg.Currency,
+		arg.Type,
+		arg.Date,
+		arg.Note,
+		arg.ExternalID,
+		arg.IsInternalTransfer,
+	)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CategoryID,
+		&i.Amount,
+		&i.Currency,
+		&i.Type,
+		&i.Date,
+		&i.Note,
+		&i.CreatedAt,
+		&i.ExternalID,
+		&i.IsInternalTransfer,
 	)
 	return i, err
 }
@@ -102,8 +161,66 @@ func (q *Queries) TransactionDeleteForUser(ctx context.Context, arg TransactionD
 	return result.RowsAffected(), nil
 }
 
+const transactionFindTransferMatch = `-- name: TransactionFindTransferMatch :one
+SELECT id, user_id, category_id, amount, currency, type, date, note, created_at, external_id, is_internal_transfer
+FROM transactions
+WHERE user_id = $1
+  AND type = $2
+  AND amount = $3
+  AND external_id <> ''
+  AND is_internal_transfer = false
+  AND date BETWEEN $4 AND $5
+ORDER BY date DESC
+LIMIT 1
+`
+
+type TransactionFindTransferMatchParams struct {
+	UserID pgtype.UUID        `json:"user_id"`
+	Type   string             `json:"type"`
+	Amount pgtype.Numeric     `json:"amount"`
+	Date   pgtype.Timestamptz `json:"date"`
+	Date_2 pgtype.Timestamptz `json:"date_2"`
+}
+
+// Looks for the other side of an internal transfer: same user, opposite
+// type, exact same amount, another Monobank-imported transaction
+// (external_id set) not already flagged, within the time window the
+// caller passes in. Deliberately NOT filtered by currency: Monobank has
+// been observed reporting the two legs of the same real transfer with
+// mismatched currency labels (e.g. one side EUR, the other UAH, same
+// exact decimal amount — a real cross-currency conversion would never
+// produce an identical number on both sides at anything but a 1:1 rate),
+// so requiring a currency match was silently failing to catch exactly
+// the cases this exists for. A same-amount, opposite-type,
+// seconds-apart coincidence between two unrelated transactions is
+// vanishingly unlikely regardless.
+func (q *Queries) TransactionFindTransferMatch(ctx context.Context, arg TransactionFindTransferMatchParams) (Transaction, error) {
+	row := q.db.QueryRow(ctx, transactionFindTransferMatch,
+		arg.UserID,
+		arg.Type,
+		arg.Amount,
+		arg.Date,
+		arg.Date_2,
+	)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CategoryID,
+		&i.Amount,
+		&i.Currency,
+		&i.Type,
+		&i.Date,
+		&i.Note,
+		&i.CreatedAt,
+		&i.ExternalID,
+		&i.IsInternalTransfer,
+	)
+	return i, err
+}
+
 const transactionListForUser = `-- name: TransactionListForUser :many
-SELECT id, user_id, category_id, amount, currency, type, date, note, created_at
+SELECT id, user_id, category_id, amount, currency, type, date, note, created_at, external_id, is_internal_transfer
 FROM transactions
 WHERE user_id = $1
   AND ($2::timestamptz IS NULL OR date >= $2)
@@ -136,6 +253,8 @@ func (q *Queries) TransactionListForUser(ctx context.Context, arg TransactionLis
 			&i.Date,
 			&i.Note,
 			&i.CreatedAt,
+			&i.ExternalID,
+			&i.IsInternalTransfer,
 		); err != nil {
 			return nil, err
 		}
@@ -147,11 +266,22 @@ func (q *Queries) TransactionListForUser(ctx context.Context, arg TransactionLis
 	return items, nil
 }
 
+const transactionMarkInternalTransfer = `-- name: TransactionMarkInternalTransfer :exec
+UPDATE transactions
+SET is_internal_transfer = true
+WHERE id = $1
+`
+
+func (q *Queries) TransactionMarkInternalTransfer(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, transactionMarkInternalTransfer, id)
+	return err
+}
+
 const transactionUpdateForUser = `-- name: TransactionUpdateForUser :one
 UPDATE transactions
 SET category_id = $3, amount = $4, currency = $5, type = $6, date = $7, note = $8
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, category_id, amount, currency, type, date, note, created_at
+RETURNING id, user_id, category_id, amount, currency, type, date, note, created_at, external_id, is_internal_transfer
 `
 
 type TransactionUpdateForUserParams struct {
@@ -187,6 +317,8 @@ func (q *Queries) TransactionUpdateForUser(ctx context.Context, arg TransactionU
 		&i.Date,
 		&i.Note,
 		&i.CreatedAt,
+		&i.ExternalID,
+		&i.IsInternalTransfer,
 	)
 	return i, err
 }

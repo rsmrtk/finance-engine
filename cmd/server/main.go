@@ -14,6 +14,7 @@ import (
 
 	"github.com/rsmrtk/finance-engine/internal/config"
 	grpcserver "github.com/rsmrtk/finance-engine/internal/grpc"
+	"github.com/rsmrtk/finance-engine/internal/monobankimport"
 	"github.com/rsmrtk/finance-engine/internal/ratesync"
 	"github.com/rsmrtk/finance-engine/internal/repository"
 	"github.com/rsmrtk/finance-engine/internal/rest"
@@ -25,6 +26,7 @@ import (
 	categorysvc "github.com/rsmrtk/finance-engine/internal/service/category"
 	monobanksvc "github.com/rsmrtk/finance-engine/internal/service/monobank"
 	ratesvc "github.com/rsmrtk/finance-engine/internal/service/rate"
+	reportssvc "github.com/rsmrtk/finance-engine/internal/service/reports"
 	sessionsvc "github.com/rsmrtk/finance-engine/internal/service/session"
 	transactionsvc "github.com/rsmrtk/finance-engine/internal/service/transaction"
 	"github.com/rsmrtk/finance-engine/internal/webhook"
@@ -110,7 +112,8 @@ func run() error {
 		return fmt.Errorf("init token encryption: %w", err)
 	}
 	monobankClient := monobank.New()
-	monobankService := monobanksvc.New(monobankRepo, monobankClient, tokenBox, cfg.PublicBaseURL)
+	monobankImporter := monobankimport.New(transactionRepo, categoryRepo, log)
+	monobankService := monobanksvc.New(monobankRepo, monobankClient, tokenBox, monobankImporter, cfg.PublicBaseURL)
 
 	ollamaClient := ollama.New(cfg.OllamaURL, cfg.OllamaModel)
 	advisorService := advisorsvc.New(transactionRepo, categoryRepo, rateRepo, ollamaClient, redisClient)
@@ -126,6 +129,8 @@ func run() error {
 		Rate:        ratesvc.New(rateRepo),
 		Monobank:    monobankService,
 	}
+
+	reportsService := reportssvc.New(services.Transaction, services.Category)
 
 	// Keeps exchange_rates fresh from the National Bank of Ukraine without
 	// needing a separate deployed service.
@@ -155,6 +160,7 @@ func run() error {
 		Sessions:      sessionService,
 		Advisor:       advisorService,
 		Billing:       billingService,
+		Reports:       reportsService,
 		Admin:         adminService,
 		JWT:           webAccessJWT,
 		CORSOrigin:    cfg.CORSAllowedOrigin,

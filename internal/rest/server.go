@@ -8,6 +8,7 @@ import (
 	adminsvc "github.com/rsmrtk/finance-engine/internal/service/admin"
 	advisorsvc "github.com/rsmrtk/finance-engine/internal/service/advisor"
 	billingsvc "github.com/rsmrtk/finance-engine/internal/service/billing"
+	reportssvc "github.com/rsmrtk/finance-engine/internal/service/reports"
 	sessionsvc "github.com/rsmrtk/finance-engine/internal/service/session"
 	"github.com/rsmrtk/finance-engine/pkg/jwt"
 	"github.com/rsmrtk/finance-engine/pkg/logger"
@@ -18,6 +19,7 @@ type Options struct {
 	Sessions      *sessionsvc.Service
 	Advisor       *advisorsvc.Service // Web-only — no gRPC/iOS counterpart, so it lives outside Services.
 	Billing       *billingsvc.Service // Web-only — the Max plan trial only exists on the web app.
+	Reports       *reportssvc.Service // Web-only — CSV export/import has no gRPC/iOS counterpart.
 	Admin         *adminsvc.Service   // finance-dashboard only.
 	JWT           jwt.JWT             // Verifies access tokens — same secret as gRPC, see cmd/server/main.go.
 	CORSOrigin    string              // finance-ui's origin — also used for cookie scheme + LiqPay result_url.
@@ -66,11 +68,16 @@ func NewMux(o Options) http.Handler {
 	mux.HandleFunc("GET /api/rates", withAuth(o.JWT, rates.list))
 	mux.HandleFunc("GET /api/rates/history", withAuth(o.JWT, rates.history))
 
+	reports := newReportsHandler(o.Reports, o.Services.Auth)
+	mux.HandleFunc("GET /api/reports/export", withAuth(o.JWT, reports.export))
+	mux.HandleFunc("POST /api/reports/import", withAuth(o.JWT, reports.importCSV))
+
 	monobank := newMonobankHandler(o.Services.Monobank, o.Services.Auth, o.Log)
 	mux.HandleFunc("POST /api/monobank/accounts", withAuth(o.JWT, monobank.accounts))
 	mux.HandleFunc("POST /api/monobank/connect", withAuth(o.JWT, monobank.connect))
 	mux.HandleFunc("GET /api/monobank/my-accounts", withAuth(o.JWT, monobank.myAccounts))
 	mux.HandleFunc("PUT /api/monobank/accounts", withAuth(o.JWT, monobank.updateAccounts))
+	mux.HandleFunc("POST /api/monobank/sync", withAuth(o.JWT, monobank.sync))
 	mux.HandleFunc("GET /api/monobank/status", withAuth(o.JWT, monobank.status))
 	mux.HandleFunc("POST /api/monobank/disconnect", withAuth(o.JWT, monobank.disconnect))
 
@@ -78,6 +85,9 @@ func NewMux(o Options) http.Handler {
 	mux.HandleFunc("POST /api/advisor/chat", withAuth(o.JWT, advisor.chat))
 	mux.HandleFunc("GET /api/advisor/insights", withAuth(o.JWT, advisor.insights))
 	mux.HandleFunc("GET /api/advisor/score", withAuth(o.JWT, advisor.score))
+	mux.HandleFunc("GET /api/advisor/subscriptions", withAuth(o.JWT, advisor.subscriptions))
+	mux.HandleFunc("GET /api/advisor/runway", withAuth(o.JWT, advisor.runway))
+	mux.HandleFunc("GET /api/advisor/pace", withAuth(o.JWT, advisor.pace))
 
 	billing := newBillingHandler(o.Billing, o.Log)
 	mux.HandleFunc("POST /api/billing/start-trial", withAuth(o.JWT, billing.startTrial))

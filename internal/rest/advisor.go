@@ -100,6 +100,100 @@ func (h *advisorHandler) score(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type subscriptionJSON struct {
+	Description         string  `json:"description"`
+	AverageAmount       float64 `json:"averageAmount"`
+	Currency            string  `json:"currency"`
+	Occurrences         int     `json:"occurrences"`
+	LastDate            string  `json:"lastDate"`
+	AverageIntervalDays float64 `json:"averageIntervalDays"`
+}
+
+// subscriptions is a plain computation over the user's own transactions
+// (no LLM call) — same "available on every plan" reasoning as score.
+func (h *advisorHandler) subscriptions(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r.Context())
+	subs, err := h.service.DetectSubscriptions(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to detect subscriptions")
+		return
+	}
+	out := make([]subscriptionJSON, len(subs))
+	for i, s := range subs {
+		out[i] = subscriptionJSON{
+			Description:         s.Description,
+			AverageAmount:       s.AverageAmount,
+			Currency:            s.Currency,
+			Occurrences:         s.Occurrences,
+			LastDate:            s.LastDate.Format(timeLayout),
+			AverageIntervalDays: s.AverageIntervalDays,
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type runwayJSON struct {
+	CurrentBalance     float64 `json:"currentBalance"`
+	DailyBurnRate      float64 `json:"dailyBurnRate"`
+	ProjectedZeroDate  string  `json:"projectedZeroDate,omitempty"`
+	NextPaydayEstimate string  `json:"nextPaydayEstimate,omitempty"`
+	WillMakeIt         bool    `json:"willMakeIt"`
+}
+
+func (h *advisorHandler) runway(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r.Context())
+	user, err := h.auth.Me(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "not signed in")
+		return
+	}
+	forecast, err := h.service.Runway(r.Context(), userID, user.BaseCurrency)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to compute runway")
+		return
+	}
+	writeJSON(w, http.StatusOK, runwayJSON{
+		CurrentBalance:     forecast.CurrentBalance,
+		DailyBurnRate:      forecast.DailyBurnRate,
+		ProjectedZeroDate:  formatOptionalTime(forecast.ProjectedZeroDate),
+		NextPaydayEstimate: formatOptionalTime(forecast.NextPaydayEstimate),
+		WillMakeIt:         forecast.WillMakeIt,
+	})
+}
+
+type categoryPaceJSON struct {
+	CategoryID     string  `json:"categoryId"`
+	CategoryName   string  `json:"categoryName"`
+	TypicalMonthly float64 `json:"typicalMonthly"`
+	SpentSoFar     float64 `json:"spentSoFar"`
+	PaceRatio      float64 `json:"paceRatio"`
+}
+
+func (h *advisorHandler) pace(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r.Context())
+	user, err := h.auth.Me(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "not signed in")
+		return
+	}
+	paces, err := h.service.BudgetPace(r.Context(), userID, user.BaseCurrency)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to compute budget pace")
+		return
+	}
+	out := make([]categoryPaceJSON, len(paces))
+	for i, p := range paces {
+		out[i] = categoryPaceJSON{
+			CategoryID:     p.CategoryID.String(),
+			CategoryName:   p.CategoryName,
+			TypicalMonthly: p.TypicalMonthly,
+			SpentSoFar:     p.SpentSoFar,
+			PaceRatio:      p.PaceRatio,
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (h *advisorHandler) insights(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromContext(r.Context())
 	user, err := h.auth.Me(r.Context(), userID)

@@ -158,6 +158,9 @@ func (s *Service) FinancialScore(ctx context.Context, userID uuid.UUID, baseCurr
 	expenseByCategory := map[uuid.UUID]float64{}
 	activeDays := map[string]bool{}
 	for _, tx := range txs {
+		if tx.IsInternalTransfer {
+			continue // Money moving between the user's own accounts — not real income or expense.
+		}
 		amount, _ := parseAmount(tx.Amount)
 		converted := convert(amount, tx.Currency, baseCurrency, rateToUAH)
 		activeDays[tx.Date.Format("2006-01-02")] = true
@@ -248,6 +251,9 @@ func (s *Service) buildSummary(ctx context.Context, userID uuid.UUID, baseCurren
 	incomeByCategory := map[string]float64{}
 
 	for _, tx := range txs {
+		if tx.IsInternalTransfer {
+			continue // Money moving between the user's own accounts — not real income or expense.
+		}
 		amount, _ := parseAmount(tx.Amount)
 		converted := convert(amount, tx.Currency, baseCurrency, rateToUAH)
 		isThisMonth := !tx.Date.Before(startOfThisMonth)

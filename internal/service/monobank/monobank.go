@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/rsmrtk/finance-engine/internal/monobankimport"
 	"github.com/rsmrtk/finance-engine/internal/repository"
 	"github.com/rsmrtk/finance-engine/pkg/cryptobox"
 	"github.com/rsmrtk/finance-engine/pkg/monobank"
@@ -20,11 +21,12 @@ type Service struct {
 	connections    *repository.MonobankRepository
 	client         *monobank.Client
 	box            *cryptobox.Box
+	importer       *monobankimport.Importer
 	webhookBaseURL string // e.g. "https://finance-engine-api.onrender.com"; must be public HTTPS.
 }
 
-func New(connections *repository.MonobankRepository, client *monobank.Client, box *cryptobox.Box, webhookBaseURL string) *Service {
-	return &Service{connections: connections, client: client, box: box, webhookBaseURL: webhookBaseURL}
+func New(connections *repository.MonobankRepository, client *monobank.Client, box *cryptobox.Box, importer *monobankimport.Importer, webhookBaseURL string) *Service {
+	return &Service{connections: connections, client: client, box: box, importer: importer, webhookBaseURL: webhookBaseURL}
 }
 
 type Status struct {
@@ -169,6 +171,66 @@ func (s *Service) UpdateAccounts(ctx context.Context, userID uuid.UUID, accountI
 		return Status{}, fmt.Errorf("update tracked accounts: %w", err)
 	}
 	return statusFromConnection(conn), nil
+}
+
+// SyncNow pulls the tracked account's last 31 days of statement directly
+// from Monobank and imports anything the real-time webhook missed — the
+// dev machine being asleep/offline when a transaction fired is the
+// common case. Idempotent via external_id (internal/monobankimport), so
+// clicking it repeatedly never creates duplicates.
+//
+// Monobank rate-limits /personal/statement the same way as
+// /personal/client-info (~1 request per token per 60 seconds) — with
+// more than one tracked account under the same token, only the first
+// gets synced per call; syncing the rest just means clicking again a
+// minute later.
+func (s *Service) SyncNow(ctx context.Context, userID uuid.UUID) (imported, reclassified int, err error) {
+	conn, err := s.connections.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, 0, fmt.Errorf("monobank is not connected")
+		}
+		return 0, 0, fmt.Errorf("lookup connection: %w", err)
+	}
+	if len(conn.AccountIDs) == 0 {
+		return 0, 0, fmt.Errorf("no accounts are being tracked")
+	}
+	token, err := s.box.Decrypt(conn.EncryptedToken)
+	if err != nil {
+		return 0, 0, fmt.Errorf("decrypt token: %w", err)
+	}
+
+	to := time.Now()
+	from := to.AddDate(0, 0, -31) // Monobank's own cap on this endpoint's range.
+
+	items, err := s.client.Statement(ctx, token, conn.AccountIDs[0], from, to)
+	if err != nil {
+		return 0, 0, fmt.Errorf("fetch statement: %w", err)
+	}
+
+	for _, item := range items {
+		created, itemErr := s.importer.Item(ctx, userID, item)
+		if itemErr != nil {
+			return imported, 0, fmt.Errorf("import transaction: %w", itemErr)
+		}
+		if created {
+			imported++
+		}
+	}
+
+	// One-time-per-click backfill: re-checks every already-imported
+	// transaction for the internal-transfer patterns too, since data
+	// imported before this detection existed never got a chance to be
+	// flagged. Cheap for personal transaction volumes.
+	reclassified, err = s.importer.ReclassifyExisting(ctx, userID)
+	if err != nil {
+		reclassified = 0 // Best-effort — a failed backfill pass shouldn't fail the whole sync.
+	}
+
+	if err := s.connections.TouchSync(ctx, userID); err != nil {
+		return imported, reclassified, fmt.Errorf("touch sync: %w", err)
+	}
+	return imported, reclassified, nil
 }
 
 func (s *Service) Status(ctx context.Context, userID uuid.UUID) (Status, error) {
