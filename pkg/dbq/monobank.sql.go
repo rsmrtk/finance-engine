@@ -22,20 +22,30 @@ func (q *Queries) MonobankConnectionDelete(ctx context.Context, userID pgtype.UU
 }
 
 const monobankConnectionGetByUserID = `-- name: MonobankConnectionGetByUserID :one
-SELECT user_id, encrypted_token, webhook_secret, masked_pan, account_id, connected_at, last_synced_at
+SELECT user_id, encrypted_token, webhook_secret, masked_pans, account_ids, connected_at, last_synced_at
 FROM monobank_connections
 WHERE user_id = $1
 `
 
-func (q *Queries) MonobankConnectionGetByUserID(ctx context.Context, userID pgtype.UUID) (MonobankConnection, error) {
+type MonobankConnectionGetByUserIDRow struct {
+	UserID         pgtype.UUID        `json:"user_id"`
+	EncryptedToken []byte             `json:"encrypted_token"`
+	WebhookSecret  string             `json:"webhook_secret"`
+	MaskedPans     []string           `json:"masked_pans"`
+	AccountIds     []string           `json:"account_ids"`
+	ConnectedAt    pgtype.Timestamptz `json:"connected_at"`
+	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
+}
+
+func (q *Queries) MonobankConnectionGetByUserID(ctx context.Context, userID pgtype.UUID) (MonobankConnectionGetByUserIDRow, error) {
 	row := q.db.QueryRow(ctx, monobankConnectionGetByUserID, userID)
-	var i MonobankConnection
+	var i MonobankConnectionGetByUserIDRow
 	err := row.Scan(
 		&i.UserID,
 		&i.EncryptedToken,
 		&i.WebhookSecret,
-		&i.MaskedPan,
-		&i.AccountID,
+		&i.MaskedPans,
+		&i.AccountIds,
 		&i.ConnectedAt,
 		&i.LastSyncedAt,
 	)
@@ -43,20 +53,30 @@ func (q *Queries) MonobankConnectionGetByUserID(ctx context.Context, userID pgty
 }
 
 const monobankConnectionGetByWebhookSecret = `-- name: MonobankConnectionGetByWebhookSecret :one
-SELECT user_id, encrypted_token, webhook_secret, masked_pan, account_id, connected_at, last_synced_at
+SELECT user_id, encrypted_token, webhook_secret, masked_pans, account_ids, connected_at, last_synced_at
 FROM monobank_connections
 WHERE webhook_secret = $1
 `
 
-func (q *Queries) MonobankConnectionGetByWebhookSecret(ctx context.Context, webhookSecret string) (MonobankConnection, error) {
+type MonobankConnectionGetByWebhookSecretRow struct {
+	UserID         pgtype.UUID        `json:"user_id"`
+	EncryptedToken []byte             `json:"encrypted_token"`
+	WebhookSecret  string             `json:"webhook_secret"`
+	MaskedPans     []string           `json:"masked_pans"`
+	AccountIds     []string           `json:"account_ids"`
+	ConnectedAt    pgtype.Timestamptz `json:"connected_at"`
+	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
+}
+
+func (q *Queries) MonobankConnectionGetByWebhookSecret(ctx context.Context, webhookSecret string) (MonobankConnectionGetByWebhookSecretRow, error) {
 	row := q.db.QueryRow(ctx, monobankConnectionGetByWebhookSecret, webhookSecret)
-	var i MonobankConnection
+	var i MonobankConnectionGetByWebhookSecretRow
 	err := row.Scan(
 		&i.UserID,
 		&i.EncryptedToken,
 		&i.WebhookSecret,
-		&i.MaskedPan,
-		&i.AccountID,
+		&i.MaskedPans,
+		&i.AccountIds,
 		&i.ConnectedAt,
 		&i.LastSyncedAt,
 	)
@@ -74,42 +94,90 @@ func (q *Queries) MonobankConnectionTouchSync(ctx context.Context, userID pgtype
 	return err
 }
 
+const monobankConnectionUpdateAccounts = `-- name: MonobankConnectionUpdateAccounts :one
+UPDATE monobank_connections
+SET account_ids = $2, masked_pans = $3
+WHERE user_id = $1
+RETURNING user_id, encrypted_token, webhook_secret, masked_pans, account_ids, connected_at, last_synced_at
+`
+
+type MonobankConnectionUpdateAccountsParams struct {
+	UserID     pgtype.UUID `json:"user_id"`
+	AccountIds []string    `json:"account_ids"`
+	MaskedPans []string    `json:"masked_pans"`
+}
+
+type MonobankConnectionUpdateAccountsRow struct {
+	UserID         pgtype.UUID        `json:"user_id"`
+	EncryptedToken []byte             `json:"encrypted_token"`
+	WebhookSecret  string             `json:"webhook_secret"`
+	MaskedPans     []string           `json:"masked_pans"`
+	AccountIds     []string           `json:"account_ids"`
+	ConnectedAt    pgtype.Timestamptz `json:"connected_at"`
+	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
+}
+
+func (q *Queries) MonobankConnectionUpdateAccounts(ctx context.Context, arg MonobankConnectionUpdateAccountsParams) (MonobankConnectionUpdateAccountsRow, error) {
+	row := q.db.QueryRow(ctx, monobankConnectionUpdateAccounts, arg.UserID, arg.AccountIds, arg.MaskedPans)
+	var i MonobankConnectionUpdateAccountsRow
+	err := row.Scan(
+		&i.UserID,
+		&i.EncryptedToken,
+		&i.WebhookSecret,
+		&i.MaskedPans,
+		&i.AccountIds,
+		&i.ConnectedAt,
+		&i.LastSyncedAt,
+	)
+	return i, err
+}
+
 const monobankConnectionUpsert = `-- name: MonobankConnectionUpsert :one
-INSERT INTO monobank_connections (user_id, encrypted_token, webhook_secret, masked_pan, account_id)
+INSERT INTO monobank_connections (user_id, encrypted_token, webhook_secret, masked_pans, account_ids)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (user_id) DO UPDATE
 SET encrypted_token = EXCLUDED.encrypted_token,
     webhook_secret  = EXCLUDED.webhook_secret,
-    masked_pan      = EXCLUDED.masked_pan,
-    account_id      = EXCLUDED.account_id,
+    masked_pans     = EXCLUDED.masked_pans,
+    account_ids     = EXCLUDED.account_ids,
     connected_at    = now(),
     last_synced_at  = NULL
-RETURNING user_id, encrypted_token, webhook_secret, masked_pan, account_id, connected_at, last_synced_at
+RETURNING user_id, encrypted_token, webhook_secret, masked_pans, account_ids, connected_at, last_synced_at
 `
 
 type MonobankConnectionUpsertParams struct {
 	UserID         pgtype.UUID `json:"user_id"`
 	EncryptedToken []byte      `json:"encrypted_token"`
 	WebhookSecret  string      `json:"webhook_secret"`
-	MaskedPan      string      `json:"masked_pan"`
-	AccountID      string      `json:"account_id"`
+	MaskedPans     []string    `json:"masked_pans"`
+	AccountIds     []string    `json:"account_ids"`
 }
 
-func (q *Queries) MonobankConnectionUpsert(ctx context.Context, arg MonobankConnectionUpsertParams) (MonobankConnection, error) {
+type MonobankConnectionUpsertRow struct {
+	UserID         pgtype.UUID        `json:"user_id"`
+	EncryptedToken []byte             `json:"encrypted_token"`
+	WebhookSecret  string             `json:"webhook_secret"`
+	MaskedPans     []string           `json:"masked_pans"`
+	AccountIds     []string           `json:"account_ids"`
+	ConnectedAt    pgtype.Timestamptz `json:"connected_at"`
+	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
+}
+
+func (q *Queries) MonobankConnectionUpsert(ctx context.Context, arg MonobankConnectionUpsertParams) (MonobankConnectionUpsertRow, error) {
 	row := q.db.QueryRow(ctx, monobankConnectionUpsert,
 		arg.UserID,
 		arg.EncryptedToken,
 		arg.WebhookSecret,
-		arg.MaskedPan,
-		arg.AccountID,
+		arg.MaskedPans,
+		arg.AccountIds,
 	)
-	var i MonobankConnection
+	var i MonobankConnectionUpsertRow
 	err := row.Scan(
 		&i.UserID,
 		&i.EncryptedToken,
 		&i.WebhookSecret,
-		&i.MaskedPan,
-		&i.AccountID,
+		&i.MaskedPans,
+		&i.AccountIds,
 		&i.ConnectedAt,
 		&i.LastSyncedAt,
 	)

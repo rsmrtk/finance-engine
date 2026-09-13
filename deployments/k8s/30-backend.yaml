@@ -12,6 +12,13 @@ stringData:
   # application). Empty is fine locally until Google Sign-In is wired up
   # on the frontend — only /api/auth/google needs it.
   GOOGLE_CLIENT_ID: ""
+  # ADMIN_PASSWORD and LIQPAY_PUBLIC_KEY/LIQPAY_PRIVATE_KEY are deliberately
+  # NOT declared here: `kubectl apply` re-applies this whole stringData
+  # block on every redeploy, which would silently clobber a real value
+  # back to whatever placeholder lived here (this bit us once already with
+  # ADMIN_PASSWORD). Set them out-of-band and they'll survive redeploys:
+  # kubectl create secret generic backend-secrets -n finance-engine \
+  #   --from-literal=ADMIN_PASSWORD=<real value> --dry-run=client -o yaml | kubectl apply -f -
 
 ---
 apiVersion: apps/v1
@@ -50,9 +57,19 @@ spec:
             - name: DEV_MODE
               value: "true" # kind is local-only; never set this on Render/production.
             - name: PUBLIC_BASE_URL
-              value: "" # Empty on kind (no public HTTPS) -> Monobank connect stays unavailable until deployed publicly.
+              # ngrok tunnel to localhost:8080, started manually (`ngrok http 8080`)
+              # for testing LiqPay/Monobank webhooks without a real cloud deploy.
+              # This is a free-tier ngrok URL — it changes every time the tunnel
+              # restarts unless a reserved static domain is used instead.
+              value: "https://ungreased-salary-riptide.ngrok-free.dev"
             - name: CORS_ALLOWED_ORIGIN
               value: "http://localhost:5173" # Vite dev server; update once finance-ui is deployed somewhere real.
+            - name: ADMIN_DASHBOARD_ORIGIN
+              value: "http://localhost:5174" # finance-dashboard's Vite dev server.
+            - name: OLLAMA_URL
+              value: "http://host.docker.internal:11434" # Ollama runs natively on the Mac (Metal GPU), not in-cluster.
+            - name: OLLAMA_MODEL
+              value: "llama3.1:8b"
           envFrom:
             - secretRef:
                 name: backend-secrets

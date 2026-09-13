@@ -25,10 +25,23 @@ type MonobankConnection struct {
 	UserID         pgtype.UUID        `json:"user_id"`
 	EncryptedToken []byte             `json:"encrypted_token"`
 	WebhookSecret  string             `json:"webhook_secret"`
-	MaskedPan      string             `json:"masked_pan"`
-	AccountID      string             `json:"account_id"`
 	ConnectedAt    pgtype.Timestamptz `json:"connected_at"`
 	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
+	AccountIds     []string           `json:"account_ids"`
+	MaskedPans     []string           `json:"masked_pans"`
+}
+
+type PaymentEvent struct {
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	OrderID          string             `json:"order_id"`
+	Plan             string             `json:"plan"`
+	Action           string             `json:"action"`
+	Status           string             `json:"status"`
+	Amount           pgtype.Numeric     `json:"amount"`
+	Currency         string             `json:"currency"`
+	ErrorDescription string             `json:"error_description"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type Session struct {
@@ -54,15 +67,20 @@ type Transaction struct {
 }
 
 type User struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }

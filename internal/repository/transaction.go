@@ -111,6 +111,11 @@ func (r *TransactionRepository) UpdateForUser(ctx context.Context, p UpdateTrans
 	return transactionFromRow(row), nil
 }
 
+// CountForUser powers the admin dashboard's user-detail view.
+func (r *TransactionRepository) CountForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	return r.q.TransactionCountForUser(ctx, pgutil.UUIDFromGoogle(userID))
+}
+
 func (r *TransactionRepository) DeleteForUser(ctx context.Context, id, userID uuid.UUID) (bool, error) {
 	rows, err := r.q.TransactionDeleteForUser(ctx, dbq.TransactionDeleteForUserParams{
 		ID:     pgutil.UUIDFromGoogle(id),
@@ -120,6 +125,16 @@ func (r *TransactionRepository) DeleteForUser(ctx context.Context, id, userID uu
 		return false, err
 	}
 	return rows > 0, nil
+}
+
+// DeleteExpiredForPlan bulk-deletes every transaction older than cutoff
+// belonging to a user on the given plan — the data-retention cleanup
+// (internal/retention), not a per-user action.
+func (r *TransactionRepository) DeleteExpiredForPlan(ctx context.Context, planName string, cutoff time.Time) (int64, error) {
+	return r.q.TransactionDeleteExpiredForPlan(ctx, dbq.TransactionDeleteExpiredForPlanParams{
+		Date: pgutil.TimeFromGo(cutoff),
+		Plan: planName,
+	})
 }
 
 func transactionFromRow(row dbq.Transaction) Transaction {

@@ -5,8 +5,18 @@ option go_package = "github.com/rsmrtk/finance-engine/api/v1/pb";
 message MonobankConnectionModel {
   message Connection {
     bool is_connected = 1;
-    string masked_pan = 2;   // e.g. "537541******1234", for display only.
+    repeated string masked_pans = 2; // e.g. "537541******1234", for display only — one per tracked account.
     string connected_at = 3; // RFC3339.
     string last_synced_at = 4; // RFC3339, empty if never synced.
+  }
+
+  // One card/jar under a personal token — a token can cover several
+  // currencies and cards, so the client shows these as a picker rather
+  // than the server guessing which one to track.
+  message Account {
+    string id = 1;
+    string masked_pan = 2;
+    string currency = 3; // ISO 4217 alpha code, e.g. "UAH", "EUR".
+    string type = 4;     // Monobank's raw type: "black", "white", "platinum", "iron", "fop", "yellow", "jar", etc.
   }
 }

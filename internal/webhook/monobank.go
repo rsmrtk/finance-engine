@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -85,8 +86,8 @@ func (h *MonobankHandler) process(ctx context.Context, secret string, payload mo
 	}
 
 	item := payload.Data.StatementItem
-	if payload.Data.Account != conn.AccountID {
-		return nil // A different account on the same token; not the one we track.
+	if !slices.Contains(conn.AccountIDs, payload.Data.Account) {
+		return nil // An account on the same token the user didn't select to track.
 	}
 	if item.Amount == 0 {
 		return nil
@@ -99,8 +100,23 @@ func (h *MonobankHandler) process(ctx context.Context, secret string, payload mo
 		amount = -amount
 	}
 
+	h.log.Info("processing monobank transaction", logger.H{
+		"mcc":          item.MCC,
+		"currencyCode": item.CurrencyCode,
+		"account":      payload.Data.Account,
+		"description":  item.Description,
+	})
+
 	categoryID := uuid.Nil
-	if name := mcc.CategoryName(item.MCC); name != "" {
+	name := mcc.CategoryName(item.MCC)
+	if name == "" && transactionType == "expense" {
+		// No MCC match (common for transfers/top-ups, which carry no MCC
+		// at all) — fall back to the catch-all category instead of
+		// leaving it blank, so there's at least something to filter/sort
+		// by without the user having to touch every single import.
+		name = "Інше"
+	}
+	if name != "" {
 		if category, ok := h.findCategory(ctx, conn.UserID, name, transactionType); ok {
 			categoryID = category
 		}
@@ -128,7 +144,7 @@ func (h *MonobankHandler) findCategory(ctx context.Context, userID uuid.UUID, na
 		return uuid.Nil, false
 	}
 	for _, category := range categories {
-		if category.Name == name && category.Type == transactionType {
+		if strings.EqualFold(strings.TrimSpace(category.Name), name) && category.Type == transactionType {
 			return category.ID, true
 		}
 	}

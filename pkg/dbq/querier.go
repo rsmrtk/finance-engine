@@ -23,20 +23,28 @@ type Querier interface {
 	// needed.
 	CategoryUpdateTranslations(ctx context.Context, arg CategoryUpdateTranslationsParams) error
 	MonobankConnectionDelete(ctx context.Context, userID pgtype.UUID) error
-	MonobankConnectionGetByUserID(ctx context.Context, userID pgtype.UUID) (MonobankConnection, error)
-	MonobankConnectionGetByWebhookSecret(ctx context.Context, webhookSecret string) (MonobankConnection, error)
+	MonobankConnectionGetByUserID(ctx context.Context, userID pgtype.UUID) (MonobankConnectionGetByUserIDRow, error)
+	MonobankConnectionGetByWebhookSecret(ctx context.Context, webhookSecret string) (MonobankConnectionGetByWebhookSecretRow, error)
 	MonobankConnectionTouchSync(ctx context.Context, userID pgtype.UUID) error
-	MonobankConnectionUpsert(ctx context.Context, arg MonobankConnectionUpsertParams) (MonobankConnection, error)
+	MonobankConnectionUpdateAccounts(ctx context.Context, arg MonobankConnectionUpdateAccountsParams) (MonobankConnectionUpdateAccountsRow, error)
+	MonobankConnectionUpsert(ctx context.Context, arg MonobankConnectionUpsertParams) (MonobankConnectionUpsertRow, error)
+	PaymentEventCreate(ctx context.Context, arg PaymentEventCreateParams) (PaymentEvent, error)
+	PaymentEventListForUser(ctx context.Context, arg PaymentEventListForUserParams) ([]PaymentEvent, error)
 	SessionCreate(ctx context.Context, arg SessionCreateParams) (Session, error)
 	SessionGetByRefreshHash(ctx context.Context, refreshHash string) (Session, error)
 	SessionListActiveForUser(ctx context.Context, userID pgtype.UUID) ([]Session, error)
 	SessionRevokeByID(ctx context.Context, id pgtype.UUID) error
 	SessionRevokeByRefreshHash(ctx context.Context, refreshHash string) error
 	SessionRevokeForUser(ctx context.Context, arg SessionRevokeForUserParams) (int64, error)
+	TransactionCountForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	TransactionCreate(ctx context.Context, arg TransactionCreateParams) (Transaction, error)
+	// Data-retention cleanup: Free keeps 30 days, Pro keeps 365 — see
+	// internal/plan and internal/retention. Max/Enterprise never call this.
+	TransactionDeleteExpiredForPlan(ctx context.Context, arg TransactionDeleteExpiredForPlanParams) (int64, error)
 	TransactionDeleteForUser(ctx context.Context, arg TransactionDeleteForUserParams) (int64, error)
 	TransactionListForUser(ctx context.Context, arg TransactionListForUserParams) ([]Transaction, error)
 	TransactionUpdateForUser(ctx context.Context, arg TransactionUpdateForUserParams) (Transaction, error)
+	UserCountByPlan(ctx context.Context) ([]UserCountByPlanRow, error)
 	UserCreate(ctx context.Context, arg UserCreateParams) (UserCreateRow, error)
 	UserCreateWithEmail(ctx context.Context, arg UserCreateWithEmailParams) (UserCreateWithEmailRow, error)
 	UserCreateWithGoogle(ctx context.Context, arg UserCreateWithGoogleParams) (UserCreateWithGoogleRow, error)
@@ -44,9 +52,28 @@ type Querier interface {
 	UserGetByEmail(ctx context.Context, email pgtype.Text) (UserGetByEmailRow, error)
 	UserGetByGoogleSub(ctx context.Context, googleSub pgtype.Text) (UserGetByGoogleSubRow, error)
 	UserGetByID(ctx context.Context, id pgtype.UUID) (UserGetByIDRow, error)
+	// Looks up the user a webhook callback belongs to — the order_id column
+	// always holds the *current* subscription's order_id, so a stale/replayed
+	// callback from a superseded order_id simply won't match anyone.
+	UserGetByLiqPayOrderID(ctx context.Context, liqpayOrderID string) (UserGetByLiqPayOrderIDRow, error)
+	// Powers the admin dashboard's user table: optional case-insensitive
+	// email search, optional exact plan filter, newest first. total_count is
+	// a window function so pagination doesn't need a second round-trip.
+	UserListForAdmin(ctx context.Context, arg UserListForAdminParams) ([]UserListForAdminRow, error)
+	// Real signup counts per day for the last N days, zero-filled by
+	// generate_series so the admin dashboard's trend chart doesn't have gaps
+	// on days with no signups.
+	UserSignupsByDay(ctx context.Context, dollar_1 int32) ([]UserSignupsByDayRow, error)
+	// Records the order_id and the already-computed trial end date before the
+	// checkout redirect even happens — the webhook that later confirms
+	// "subscribed" just flips plan/status, it doesn't need to (re)compute
+	// the trial end date itself.
+	UserStartTrial(ctx context.Context, arg UserStartTrialParams) (UserStartTrialRow, error)
 	UserUpdateBaseCurrency(ctx context.Context, arg UserUpdateBaseCurrencyParams) (UserUpdateBaseCurrencyRow, error)
 	UserUpdateGoals(ctx context.Context, arg UserUpdateGoalsParams) (UserUpdateGoalsRow, error)
 	UserUpdatePreferences(ctx context.Context, arg UserUpdatePreferencesParams) (UserUpdatePreferencesRow, error)
+	UserUpdateProfile(ctx context.Context, arg UserUpdateProfileParams) (UserUpdateProfileRow, error)
+	UserUpdateSubscription(ctx context.Context, arg UserUpdateSubscriptionParams) (UserUpdateSubscriptionRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

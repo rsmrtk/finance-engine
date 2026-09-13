@@ -11,10 +11,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const userCountByPlan = `-- name: UserCountByPlan :many
+SELECT plan, subscription_status, count(*) AS user_count
+FROM users
+GROUP BY plan, subscription_status
+`
+
+type UserCountByPlanRow struct {
+	Plan               string `json:"plan"`
+	SubscriptionStatus string `json:"subscription_status"`
+	UserCount          int64  `json:"user_count"`
+}
+
+func (q *Queries) UserCountByPlan(ctx context.Context) ([]UserCountByPlanRow, error) {
+	rows, err := q.db.Query(ctx, userCountByPlan)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserCountByPlanRow
+	for rows.Next() {
+		var i UserCountByPlanRow
+		if err := rows.Scan(&i.Plan, &i.SubscriptionStatus, &i.UserCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const userCreate = `-- name: UserCreate :one
 INSERT INTO users (apple_sub, email, base_currency)
 VALUES ($1, $2, $3)
-RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 `
 
 type UserCreateParams struct {
@@ -24,17 +56,22 @@ type UserCreateParams struct {
 }
 
 type UserCreateRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserCreate(ctx context.Context, arg UserCreateParams) (UserCreateRow, error) {
@@ -51,7 +88,12 @@ func (q *Queries) UserCreate(ctx context.Context, arg UserCreateParams) (UserCre
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
@@ -59,7 +101,7 @@ func (q *Queries) UserCreate(ctx context.Context, arg UserCreateParams) (UserCre
 const userCreateWithEmail = `-- name: UserCreateWithEmail :one
 INSERT INTO users (email, password_hash, base_currency)
 VALUES ($1, $2, $3)
-RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 `
 
 type UserCreateWithEmailParams struct {
@@ -69,17 +111,22 @@ type UserCreateWithEmailParams struct {
 }
 
 type UserCreateWithEmailRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserCreateWithEmail(ctx context.Context, arg UserCreateWithEmailParams) (UserCreateWithEmailRow, error) {
@@ -96,7 +143,12 @@ func (q *Queries) UserCreateWithEmail(ctx context.Context, arg UserCreateWithEma
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
@@ -104,7 +156,7 @@ func (q *Queries) UserCreateWithEmail(ctx context.Context, arg UserCreateWithEma
 const userCreateWithGoogle = `-- name: UserCreateWithGoogle :one
 INSERT INTO users (google_sub, email, base_currency)
 VALUES ($1, $2, $3)
-RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 `
 
 type UserCreateWithGoogleParams struct {
@@ -114,17 +166,22 @@ type UserCreateWithGoogleParams struct {
 }
 
 type UserCreateWithGoogleRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserCreateWithGoogle(ctx context.Context, arg UserCreateWithGoogleParams) (UserCreateWithGoogleRow, error) {
@@ -141,29 +198,39 @@ func (q *Queries) UserCreateWithGoogle(ctx context.Context, arg UserCreateWithGo
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
 
 const userGetByAppleSub = `-- name: UserGetByAppleSub :one
-SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 FROM users
 WHERE apple_sub = $1
 `
 
 type UserGetByAppleSubRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserGetByAppleSub(ctx context.Context, appleSub pgtype.Text) (UserGetByAppleSubRow, error) {
@@ -180,29 +247,39 @@ func (q *Queries) UserGetByAppleSub(ctx context.Context, appleSub pgtype.Text) (
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
 
 const userGetByEmail = `-- name: UserGetByEmail :one
-SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 FROM users
 WHERE email = $1
 `
 
 type UserGetByEmailRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserGetByEmail(ctx context.Context, email pgtype.Text) (UserGetByEmailRow, error) {
@@ -219,29 +296,39 @@ func (q *Queries) UserGetByEmail(ctx context.Context, email pgtype.Text) (UserGe
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
 
 const userGetByGoogleSub = `-- name: UserGetByGoogleSub :one
-SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 FROM users
 WHERE google_sub = $1
 `
 
 type UserGetByGoogleSubRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserGetByGoogleSub(ctx context.Context, googleSub pgtype.Text) (UserGetByGoogleSubRow, error) {
@@ -258,29 +345,39 @@ func (q *Queries) UserGetByGoogleSub(ctx context.Context, googleSub pgtype.Text)
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
 
 const userGetByID = `-- name: UserGetByID :one
-SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 FROM users
 WHERE id = $1
 `
 
 type UserGetByIDRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserGetByID(ctx context.Context, id pgtype.UUID) (UserGetByIDRow, error) {
@@ -297,7 +394,242 @@ func (q *Queries) UserGetByID(ctx context.Context, id pgtype.UUID) (UserGetByIDR
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
+	)
+	return i, err
+}
+
+const userGetByLiqPayOrderID = `-- name: UserGetByLiqPayOrderID :one
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
+FROM users
+WHERE liqpay_order_id = $1
+`
+
+type UserGetByLiqPayOrderIDRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
+}
+
+// Looks up the user a webhook callback belongs to — the order_id column
+// always holds the *current* subscription's order_id, so a stale/replayed
+// callback from a superseded order_id simply won't match anyone.
+func (q *Queries) UserGetByLiqPayOrderID(ctx context.Context, liqpayOrderID string) (UserGetByLiqPayOrderIDRow, error) {
+	row := q.db.QueryRow(ctx, userGetByLiqPayOrderID, liqpayOrderID)
+	var i UserGetByLiqPayOrderIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
+		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
+	)
+	return i, err
+}
+
+const userListForAdmin = `-- name: UserListForAdmin :many
+SELECT id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar,
+  count(*) OVER() AS total_count
+FROM users
+WHERE ($3::text = '' OR email ILIKE '%' || $3 || '%')
+  AND ($4::text = '' OR plan = $4)
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type UserListForAdminParams struct {
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
+	Column3 string `json:"column_3"`
+	Column4 string `json:"column_4"`
+}
+
+type UserListForAdminRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
+	TotalCount         int64              `json:"total_count"`
+}
+
+// Powers the admin dashboard's user table: optional case-insensitive
+// email search, optional exact plan filter, newest first. total_count is
+// a window function so pagination doesn't need a second round-trip.
+func (q *Queries) UserListForAdmin(ctx context.Context, arg UserListForAdminParams) ([]UserListForAdminRow, error) {
+	rows, err := q.db.Query(ctx, userListForAdmin,
+		arg.Limit,
+		arg.Offset,
+		arg.Column3,
+		arg.Column4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserListForAdminRow
+	for rows.Next() {
+		var i UserListForAdminRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AppleSub,
+			&i.Email,
+			&i.BaseCurrency,
+			&i.PasswordHash,
+			&i.GoogleSub,
+			&i.Theme,
+			&i.GradientColor,
+			&i.Plan,
+			&i.Goals,
+			&i.SubscriptionStatus,
+			&i.TrialEndsAt,
+			&i.LiqpayOrderID,
+			&i.CreatedAt,
+			&i.Name,
+			&i.Avatar,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const userSignupsByDay = `-- name: UserSignupsByDay :many
+SELECT d.day::date AS day, count(u.id) AS signups
+FROM generate_series(now() - ($1::int || ' days')::interval, now(), '1 day') AS d(day)
+LEFT JOIN users u ON u.created_at::date = d.day::date
+GROUP BY d.day
+ORDER BY d.day
+`
+
+type UserSignupsByDayRow struct {
+	Day     pgtype.Date `json:"day"`
+	Signups int64       `json:"signups"`
+}
+
+// Real signup counts per day for the last N days, zero-filled by
+// generate_series so the admin dashboard's trend chart doesn't have gaps
+// on days with no signups.
+func (q *Queries) UserSignupsByDay(ctx context.Context, dollar_1 int32) ([]UserSignupsByDayRow, error) {
+	rows, err := q.db.Query(ctx, userSignupsByDay, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSignupsByDayRow
+	for rows.Next() {
+		var i UserSignupsByDayRow
+		if err := rows.Scan(&i.Day, &i.Signups); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const userStartTrial = `-- name: UserStartTrial :one
+UPDATE users SET liqpay_order_id = $2, subscription_status = 'pending', trial_ends_at = $3
+WHERE id = $1
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
+`
+
+type UserStartTrialParams struct {
+	ID            pgtype.UUID        `json:"id"`
+	LiqpayOrderID string             `json:"liqpay_order_id"`
+	TrialEndsAt   pgtype.Timestamptz `json:"trial_ends_at"`
+}
+
+type UserStartTrialRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
+}
+
+// Records the order_id and the already-computed trial end date before the
+// checkout redirect even happens — the webhook that later confirms
+// "subscribed" just flips plan/status, it doesn't need to (re)compute
+// the trial end date itself.
+func (q *Queries) UserStartTrial(ctx context.Context, arg UserStartTrialParams) (UserStartTrialRow, error) {
+	row := q.db.QueryRow(ctx, userStartTrial, arg.ID, arg.LiqpayOrderID, arg.TrialEndsAt)
+	var i UserStartTrialRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
+		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
@@ -305,7 +637,7 @@ func (q *Queries) UserGetByID(ctx context.Context, id pgtype.UUID) (UserGetByIDR
 const userUpdateBaseCurrency = `-- name: UserUpdateBaseCurrency :one
 UPDATE users SET base_currency = $2
 WHERE id = $1
-RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 `
 
 type UserUpdateBaseCurrencyParams struct {
@@ -314,17 +646,22 @@ type UserUpdateBaseCurrencyParams struct {
 }
 
 type UserUpdateBaseCurrencyRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserUpdateBaseCurrency(ctx context.Context, arg UserUpdateBaseCurrencyParams) (UserUpdateBaseCurrencyRow, error) {
@@ -341,7 +678,12 @@ func (q *Queries) UserUpdateBaseCurrency(ctx context.Context, arg UserUpdateBase
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
@@ -349,7 +691,7 @@ func (q *Queries) UserUpdateBaseCurrency(ctx context.Context, arg UserUpdateBase
 const userUpdateGoals = `-- name: UserUpdateGoals :one
 UPDATE users SET goals = $2
 WHERE id = $1
-RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 `
 
 type UserUpdateGoalsParams struct {
@@ -358,17 +700,22 @@ type UserUpdateGoalsParams struct {
 }
 
 type UserUpdateGoalsRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserUpdateGoals(ctx context.Context, arg UserUpdateGoalsParams) (UserUpdateGoalsRow, error) {
@@ -385,7 +732,12 @@ func (q *Queries) UserUpdateGoals(ctx context.Context, arg UserUpdateGoalsParams
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }
@@ -393,7 +745,7 @@ func (q *Queries) UserUpdateGoals(ctx context.Context, arg UserUpdateGoalsParams
 const userUpdatePreferences = `-- name: UserUpdatePreferences :one
 UPDATE users SET theme = $2, gradient_color = $3
 WHERE id = $1
-RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, created_at
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
 `
 
 type UserUpdatePreferencesParams struct {
@@ -403,17 +755,22 @@ type UserUpdatePreferencesParams struct {
 }
 
 type UserUpdatePreferencesRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	AppleSub      pgtype.Text        `json:"apple_sub"`
-	Email         pgtype.Text        `json:"email"`
-	BaseCurrency  string             `json:"base_currency"`
-	PasswordHash  pgtype.Text        `json:"password_hash"`
-	GoogleSub     pgtype.Text        `json:"google_sub"`
-	Theme         string             `json:"theme"`
-	GradientColor string             `json:"gradient_color"`
-	Plan          string             `json:"plan"`
-	Goals         string             `json:"goals"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
 }
 
 func (q *Queries) UserUpdatePreferences(ctx context.Context, arg UserUpdatePreferencesParams) (UserUpdatePreferencesRow, error) {
@@ -430,7 +787,128 @@ func (q *Queries) UserUpdatePreferences(ctx context.Context, arg UserUpdatePrefe
 		&i.GradientColor,
 		&i.Plan,
 		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
 		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
+	)
+	return i, err
+}
+
+const userUpdateProfile = `-- name: UserUpdateProfile :one
+UPDATE users SET name = $2, avatar = $3
+WHERE id = $1
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
+`
+
+type UserUpdateProfileParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Name   string      `json:"name"`
+	Avatar string      `json:"avatar"`
+}
+
+type UserUpdateProfileRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
+}
+
+func (q *Queries) UserUpdateProfile(ctx context.Context, arg UserUpdateProfileParams) (UserUpdateProfileRow, error) {
+	row := q.db.QueryRow(ctx, userUpdateProfile, arg.ID, arg.Name, arg.Avatar)
+	var i UserUpdateProfileRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
+		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
+	)
+	return i, err
+}
+
+const userUpdateSubscription = `-- name: UserUpdateSubscription :one
+UPDATE users SET plan = $2, subscription_status = $3, trial_ends_at = $4
+WHERE id = $1
+RETURNING id, apple_sub, email, base_currency, password_hash, google_sub, theme, gradient_color, plan, goals, subscription_status, trial_ends_at, liqpay_order_id, created_at, name, avatar
+`
+
+type UserUpdateSubscriptionParams struct {
+	ID                 pgtype.UUID        `json:"id"`
+	Plan               string             `json:"plan"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+}
+
+type UserUpdateSubscriptionRow struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AppleSub           pgtype.Text        `json:"apple_sub"`
+	Email              pgtype.Text        `json:"email"`
+	BaseCurrency       string             `json:"base_currency"`
+	PasswordHash       pgtype.Text        `json:"password_hash"`
+	GoogleSub          pgtype.Text        `json:"google_sub"`
+	Theme              string             `json:"theme"`
+	GradientColor      string             `json:"gradient_color"`
+	Plan               string             `json:"plan"`
+	Goals              string             `json:"goals"`
+	SubscriptionStatus string             `json:"subscription_status"`
+	TrialEndsAt        pgtype.Timestamptz `json:"trial_ends_at"`
+	LiqpayOrderID      string             `json:"liqpay_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Name               string             `json:"name"`
+	Avatar             string             `json:"avatar"`
+}
+
+func (q *Queries) UserUpdateSubscription(ctx context.Context, arg UserUpdateSubscriptionParams) (UserUpdateSubscriptionRow, error) {
+	row := q.db.QueryRow(ctx, userUpdateSubscription,
+		arg.ID,
+		arg.Plan,
+		arg.SubscriptionStatus,
+		arg.TrialEndsAt,
+	)
+	var i UserUpdateSubscriptionRow
+	err := row.Scan(
+		&i.ID,
+		&i.AppleSub,
+		&i.Email,
+		&i.BaseCurrency,
+		&i.PasswordHash,
+		&i.GoogleSub,
+		&i.Theme,
+		&i.GradientColor,
+		&i.Plan,
+		&i.Goals,
+		&i.SubscriptionStatus,
+		&i.TrialEndsAt,
+		&i.LiqpayOrderID,
+		&i.CreatedAt,
+		&i.Name,
+		&i.Avatar,
 	)
 	return i, err
 }

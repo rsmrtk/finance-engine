@@ -29,25 +29,71 @@ func New(connections *repository.MonobankRepository, client *monobank.Client, bo
 
 type Status struct {
 	IsConnected  bool
-	MaskedPan    string
+	MaskedPans   []string
 	ConnectedAt  time.Time
 	LastSyncedAt time.Time // Zero value if never synced.
 }
 
-// Connect validates the personal token against Monobank, registers our
-// webhook so new transactions push to us automatically, and stores the
-// token encrypted (it's effectively a bearer credential for the account).
-func (s *Service) Connect(ctx context.Context, userID uuid.UUID, personalToken string) (Status, error) {
+// AccountOption is one card/jar under a personal token, shown to the user
+// so they can pick which one to track — Monobank's API returns every
+// account (different currencies, cards, and jars all get their own
+// entry), and there's no reliable way to guess which one the user
+// actually wants without asking them.
+type AccountOption struct {
+	ID        string
+	MaskedPan string
+	Currency  string
+	Type      string // Monobank's raw type: "black", "white", "platinum", "iron", "fop", "yellow", "jar", etc.
+	Selected  bool   // Only meaningful from ListMyAccounts — true if already tracked.
+}
+
+// ListAccounts validates the personal token against Monobank and returns
+// every account under it, so the frontend can show a picker instead of
+// us guessing which one to track.
+func (s *Service) ListAccounts(ctx context.Context, personalToken string) ([]AccountOption, error) {
+	if personalToken == "" {
+		return nil, fmt.Errorf("personal_token is required")
+	}
+	info, err := s.client.ClientInfo(ctx, personalToken)
+	if err != nil {
+		return nil, fmt.Errorf("validate token with monobank: %w", err)
+	}
+	options := make([]AccountOption, 0, len(info.Accounts))
+	for _, a := range info.Accounts {
+		pan := ""
+		if len(a.MaskedPan) > 0 {
+			pan = a.MaskedPan[0]
+		}
+		options = append(options, AccountOption{
+			ID:        a.ID,
+			MaskedPan: pan,
+			Currency:  monobank.CurrencyCode(a.CurrencyCode),
+			Type:      a.Type,
+		})
+	}
+	return options, nil
+}
+
+// Connect registers our webhook so new transactions push to us
+// automatically, and stores the token encrypted (it's effectively a
+// bearer credential for the account). accountIDs/maskedPans (parallel,
+// same order) come from a prior ListAccounts call the caller already
+// made — Connect deliberately does NOT call ClientInfo again to
+// re-verify them: Monobank rate-limits /personal/client-info to roughly
+// one call per token per 60 seconds, and a user picking cards takes less
+// time than that, so a second call here reliably 429s and silently
+// breaks every connection attempt. SetWebHook (a different, separately
+// -limited endpoint) still fails loudly on a bad or revoked token, so
+// token validity isn't lost by skipping the recheck.
+func (s *Service) Connect(ctx context.Context, userID uuid.UUID, personalToken string, accountIDs, maskedPans []string) (Status, error) {
 	if personalToken == "" {
 		return Status{}, fmt.Errorf("personal_token is required")
 	}
+	if len(accountIDs) == 0 {
+		return Status{}, fmt.Errorf("at least one account_id is required")
+	}
 	if s.webhookBaseURL == "" {
 		return Status{}, fmt.Errorf("PUBLIC_BASE_URL is not configured on the server; Monobank needs a public HTTPS URL to send transactions to")
-	}
-
-	info, err := s.client.ClientInfo(ctx, personalToken)
-	if err != nil {
-		return Status{}, fmt.Errorf("validate token with monobank: %w", err)
 	}
 
 	secret, err := randomSecret()
@@ -69,13 +115,59 @@ func (s *Service) Connect(ctx context.Context, userID uuid.UUID, personalToken s
 		UserID:         userID,
 		EncryptedToken: encrypted,
 		WebhookSecret:  secret,
-		MaskedPan:      info.FirstMaskedPan(),
-		AccountID:      info.PrimaryAccountID(),
+		MaskedPans:     maskedPans,
+		AccountIDs:     accountIDs,
 	})
 	if err != nil {
 		return Status{}, fmt.Errorf("save connection: %w", err)
 	}
 
+	return statusFromConnection(conn), nil
+}
+
+// ListMyAccounts is ListAccounts for an already-connected user editing
+// which cards to track — it decrypts the token we already stored instead
+// of asking for it again, and flags which accounts are currently tracked
+// so the frontend can pre-check them in the same picker UI used at
+// connect time.
+func (s *Service) ListMyAccounts(ctx context.Context, userID uuid.UUID) ([]AccountOption, error) {
+	conn, err := s.connections.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("monobank is not connected")
+		}
+		return nil, fmt.Errorf("lookup connection: %w", err)
+	}
+	token, err := s.box.Decrypt(conn.EncryptedToken)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt token: %w", err)
+	}
+	options, err := s.ListAccounts(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	tracked := make(map[string]bool, len(conn.AccountIDs))
+	for _, id := range conn.AccountIDs {
+		tracked[id] = true
+	}
+	for i := range options {
+		options[i].Selected = tracked[options[i].ID]
+	}
+	return options, nil
+}
+
+// UpdateAccounts changes which accounts an already-connected user tracks
+// — no Monobank call needed (the webhook is already registered for the
+// whole token, not per-account), just which account ids our own webhook
+// filter accepts.
+func (s *Service) UpdateAccounts(ctx context.Context, userID uuid.UUID, accountIDs, maskedPans []string) (Status, error) {
+	if len(accountIDs) == 0 {
+		return Status{}, fmt.Errorf("at least one account_id is required")
+	}
+	conn, err := s.connections.UpdateAccounts(ctx, userID, accountIDs, maskedPans)
+	if err != nil {
+		return Status{}, fmt.Errorf("update tracked accounts: %w", err)
+	}
 	return statusFromConnection(conn), nil
 }
 
@@ -97,7 +189,7 @@ func (s *Service) Disconnect(ctx context.Context, userID uuid.UUID) error {
 func statusFromConnection(conn repository.MonobankConnection) Status {
 	return Status{
 		IsConnected:  true,
-		MaskedPan:    conn.MaskedPan,
+		MaskedPans:   conn.MaskedPans,
 		ConnectedAt:  conn.ConnectedAt,
 		LastSyncedAt: conn.LastSyncedAt,
 	}

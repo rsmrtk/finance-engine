@@ -51,6 +51,35 @@ type Config struct {
 	// hashed in the sessions table) stays valid before the user must log
 	// in again.
 	SessionRefreshDuration time.Duration
+
+	// OllamaURL points at a self-hosted Ollama instance (free, private —
+	// see pkg/ollama) backing the AI financial advisor. In kind, this is
+	// the host's own Ollama via Docker's host-gateway DNS name, since
+	// Ollama runs natively on macOS for Metal GPU acceleration rather
+	// than as a container.
+	OllamaURL string
+	// OllamaModel is the model name as shown by `ollama list` — must
+	// already be pulled on the host (`ollama pull <name>`).
+	OllamaModel string
+
+	// LiqPay* back the Max-plan 7-day trial + subscription billing
+	// (internal/service/billing, pkg/liqpay). Keys live in the
+	// backend-secrets k8s Secret, never in this file's defaults.
+	LiqPayPublicKey  string
+	LiqPayPrivateKey string
+	// LiqPaySandbox forces every request through LiqPay's test processing
+	// (no real money moves) regardless of which keys are configured —
+	// defaults true so a misconfigured deploy fails safe, not expensive.
+	LiqPaySandbox bool
+
+	// AdminDashboardOrigin is finance-dashboard's own origin — a second,
+	// separate frontend, so it needs its own CORS allowance alongside
+	// CORSAllowedOrigin (finance-ui's). See internal/rest's withCORS.
+	AdminDashboardOrigin string
+	// AdminPassword gates POST /api/admin/login — this app has no admin
+	// user model, just one shared password for the one operator (see
+	// internal/service/adminauth). Never set a default in real use.
+	AdminPassword string
 }
 
 func Load() (*Config, error) {
@@ -85,6 +114,16 @@ func Load() (*Config, error) {
 		CORSAllowedOrigin:      getEnv("CORS_ALLOWED_ORIGIN", "http://localhost:5173"),
 		JWTWebAccessDuration:   jwtWebAccessDuration,
 		SessionRefreshDuration: sessionRefreshDuration,
+
+		OllamaURL:   getEnv("OLLAMA_URL", "http://host.docker.internal:11434"),
+		OllamaModel: getEnv("OLLAMA_MODEL", "llama3.1:8b"),
+
+		LiqPayPublicKey:  getEnv("LIQPAY_PUBLIC_KEY", ""),
+		LiqPayPrivateKey: getEnv("LIQPAY_PRIVATE_KEY", ""),
+		LiqPaySandbox:    getEnv("LIQPAY_SANDBOX", "true") == "true",
+
+		AdminDashboardOrigin: getEnv("ADMIN_DASHBOARD_ORIGIN", "http://localhost:5174"),
+		AdminPassword:        getEnv("ADMIN_PASSWORD", ""),
 	}
 
 	if err := cfg.validate(); err != nil {

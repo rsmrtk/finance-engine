@@ -12,20 +12,25 @@ import (
 const timeLayout = "2006-01-02T15:04:05Z07:00"
 
 type userJSON struct {
-	ID            string `json:"id"`
-	Email         string `json:"email"`
-	BaseCurrency  string `json:"baseCurrency"`
-	Theme         string `json:"theme"`
-	GradientColor string `json:"gradientColor"`
-	Plan          string `json:"plan"`
-	Goals         string `json:"goals"`
-	CreatedAt     string `json:"createdAt"`
+	ID                 string `json:"id"`
+	Email              string `json:"email"`
+	Name               string `json:"name"`
+	Avatar             string `json:"avatar,omitempty"`
+	BaseCurrency       string `json:"baseCurrency"`
+	Theme              string `json:"theme"`
+	GradientColor      string `json:"gradientColor"`
+	Plan               string `json:"plan"`
+	Goals              string `json:"goals"`
+	SubscriptionStatus string `json:"subscriptionStatus,omitempty"`
+	TrialEndsAt        string `json:"trialEndsAt,omitempty"`
+	CreatedAt          string `json:"createdAt"`
 }
 
 func userToJSON(u repository.User) userJSON {
 	return userJSON{
-		ID: u.ID.String(), Email: u.Email, BaseCurrency: u.BaseCurrency,
+		ID: u.ID.String(), Email: u.Email, Name: u.Name, Avatar: u.Avatar, BaseCurrency: u.BaseCurrency,
 		Theme: u.Theme, GradientColor: u.GradientColor, Plan: u.Plan, Goals: u.Goals,
+		SubscriptionStatus: u.SubscriptionStatus, TrialEndsAt: formatOptionalTime(u.TrialEndsAt),
 		CreatedAt: u.CreatedAt.Format(timeLayout),
 	}
 }
@@ -80,10 +85,10 @@ func rateToJSON(r repository.Rate) rateJSON {
 }
 
 type monobankConnectionJSON struct {
-	IsConnected  bool   `json:"isConnected"`
-	MaskedPan    string `json:"maskedPan"`
-	ConnectedAt  string `json:"connectedAt,omitempty"`
-	LastSyncedAt string `json:"lastSyncedAt,omitempty"`
+	IsConnected  bool     `json:"isConnected"`
+	MaskedPans   []string `json:"maskedPans"`
+	ConnectedAt  string   `json:"connectedAt,omitempty"`
+	LastSyncedAt string   `json:"lastSyncedAt,omitempty"`
 }
 
 type sessionJSON struct {

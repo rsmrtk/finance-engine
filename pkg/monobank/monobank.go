@@ -90,21 +90,3 @@ func (c *Client) SetWebHook(ctx context.Context, personalToken, webhookURL strin
 	}
 	return nil
 }
-
-// FirstMaskedPan returns a display-friendly masked card number for the
-// primary account, or "" if unavailable.
-func (info *ClientInfo) FirstMaskedPan() string {
-	if len(info.Accounts) == 0 || len(info.Accounts[0].MaskedPan) == 0 {
-		return ""
-	}
-	return info.Accounts[0].MaskedPan[0]
-}
-
-// PrimaryAccountID returns the id of the first (default) account, used to
-// scope which account's transactions we care about.
-func (info *ClientInfo) PrimaryAccountID() string {
-	if len(info.Accounts) == 0 {
-		return ""
-	}
-	return info.Accounts[0].ID
-}

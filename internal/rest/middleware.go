@@ -25,14 +25,22 @@ func userIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
-// withCORS restricts the API to one exact origin. A credentialed request
-// (cookies) can never use "Access-Control-Allow-Origin: *" — the browser
-// rejects that combination — so this always echoes back the one configured
-// origin rather than a wildcard.
-func withCORS(allowedOrigin string, next http.Handler) http.Handler {
+// withCORS restricts the API to a small, exact allow-list of origins —
+// finance-ui and finance-dashboard, two separate frontends on two
+// separate origins. A credentialed request (cookies) can never use
+// "Access-Control-Allow-Origin: *" — the browser rejects that
+// combination — so this echoes back whichever allowed origin actually
+// made the request, never a wildcard.
+func withCORS(allowedOrigins []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := r.Header.Get("Origin")
+		for _, allowed := range allowedOrigins {
+			if origin != "" && origin == allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				break
+			}
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {

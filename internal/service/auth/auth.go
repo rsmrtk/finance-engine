@@ -191,6 +191,31 @@ func (s *Service) UpdateGoals(ctx context.Context, userID uuid.UUID, goals strin
 	return s.users.UpdateGoals(ctx, userID, goals)
 }
 
+const (
+	maxNameLength = 80
+	// A data: URI, base64-encoded. 300k chars is ~225KB of actual image
+	// data — the frontend resizes to a small square before ever getting
+	// here, so a legitimate avatar is nowhere near this; it's just a
+	// backstop against someone posting something huge to a TEXT column.
+	maxAvatarLength = 300_000
+)
+
+// UpdateProfile saves the display name + avatar shown on the profile
+// page. avatar must be a data: URI (or "" to clear it) — never a remote
+// URL, since nothing here fetches or validates a URL's content.
+func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, name, avatar string) (repository.User, error) {
+	if len(name) > maxNameLength {
+		return repository.User{}, fmt.Errorf("name is too long (max %d characters)", maxNameLength)
+	}
+	if len(avatar) > maxAvatarLength {
+		return repository.User{}, fmt.Errorf("avatar image is too large")
+	}
+	if avatar != "" && !strings.HasPrefix(avatar, "data:image/") {
+		return repository.User{}, fmt.Errorf("avatar must be an image data URI")
+	}
+	return s.users.UpdateProfile(ctx, userID, strings.TrimSpace(name), avatar)
+}
+
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }

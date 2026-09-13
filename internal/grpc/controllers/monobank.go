@@ -26,11 +26,32 @@ func (c *MonobankController) ConnectMonobank(ctx context.Context, req *pb.Connec
 		return nil, status.Error(codes.Unauthenticated, "missing user")
 	}
 
-	result, err := c.service.Connect(ctx, userID, req.GetPersonalToken())
+	result, err := c.service.Connect(ctx, userID, req.GetPersonalToken(), req.GetAccountIds(), req.GetMaskedPans())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	return &pb.MonobankStatusReply{Connection: monobankStatusToProto(result)}, nil
+}
+
+func (c *MonobankController) MonobankAccounts(ctx context.Context, req *pb.MonobankAccountsRequest) (*pb.MonobankAccountsReply, error) {
+	if _, ok := interceptors.UserIDFromContext(ctx); !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing user")
+	}
+
+	options, err := c.service.ListAccounts(ctx, req.GetPersonalToken())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	accounts := make([]*pb.MonobankConnectionModel_Account, len(options))
+	for i, o := range options {
+		accounts[i] = &pb.MonobankConnectionModel_Account{
+			Id:        o.ID,
+			MaskedPan: o.MaskedPan,
+			Currency:  o.Currency,
+			Type:      o.Type,
+		}
+	}
+	return &pb.MonobankAccountsReply{Accounts: accounts}, nil
 }
 
 func (c *MonobankController) MonobankStatus(ctx context.Context, _ *pb.MonobankStatusRequest) (*pb.MonobankStatusReply, error) {
@@ -61,7 +82,7 @@ func (c *MonobankController) DisconnectMonobank(ctx context.Context, _ *pb.Disco
 func monobankStatusToProto(s monobanksvc.Status) *pb.MonobankConnectionModel_Connection {
 	connection := &pb.MonobankConnectionModel_Connection{
 		IsConnected: s.IsConnected,
-		MaskedPan:   s.MaskedPan,
+		MaskedPans:  s.MaskedPans,
 	}
 	if !s.ConnectedAt.IsZero() {
 		connection.ConnectedAt = s.ConnectedAt.Format(timeLayout)

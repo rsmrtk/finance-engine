@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const transactionCountForUser = `-- name: TransactionCountForUser :one
+SELECT count(*) FROM transactions WHERE user_id = $1
+`
+
+func (q *Queries) TransactionCountForUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, transactionCountForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const transactionCreate = `-- name: TransactionCreate :one
 INSERT INTO transactions (user_id, category_id, amount, currency, type, date, note)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -50,6 +61,27 @@ func (q *Queries) TransactionCreate(ctx context.Context, arg TransactionCreatePa
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const transactionDeleteExpiredForPlan = `-- name: TransactionDeleteExpiredForPlan :execrows
+DELETE FROM transactions
+WHERE date < $1
+  AND user_id IN (SELECT id FROM users WHERE plan = $2)
+`
+
+type TransactionDeleteExpiredForPlanParams struct {
+	Date pgtype.Timestamptz `json:"date"`
+	Plan string             `json:"plan"`
+}
+
+// Data-retention cleanup: Free keeps 30 days, Pro keeps 365 — see
+// internal/plan and internal/retention. Max/Enterprise never call this.
+func (q *Queries) TransactionDeleteExpiredForPlan(ctx context.Context, arg TransactionDeleteExpiredForPlanParams) (int64, error) {
+	result, err := q.db.Exec(ctx, transactionDeleteExpiredForPlan, arg.Date, arg.Plan)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const transactionDeleteForUser = `-- name: TransactionDeleteForUser :execrows

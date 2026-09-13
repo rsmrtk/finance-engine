@@ -110,6 +110,26 @@ func (h *authHandler) updatePreferences(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"user": userToJSON(user)})
 }
 
+type updateProfileRequest struct {
+	Name   string `json:"name"`
+	Avatar string `json:"avatar"`
+}
+
+func (h *authHandler) updateProfile(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r.Context())
+	var req updateProfileRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	user, err := h.auth.UpdateProfile(r.Context(), userID, req.Name, req.Avatar)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": userToJSON(user)})
+}
+
 type updateGoalsRequest struct {
 	Goals string `json:"goals"`
 }

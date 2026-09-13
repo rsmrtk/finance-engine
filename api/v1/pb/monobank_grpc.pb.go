@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	MonobankService_ConnectMonobank_FullMethodName    = "/MonobankService/ConnectMonobank"
+	MonobankService_MonobankAccounts_FullMethodName   = "/MonobankService/MonobankAccounts"
 	MonobankService_MonobankStatus_FullMethodName     = "/MonobankService/MonobankStatus"
 	MonobankService_DisconnectMonobank_FullMethodName = "/MonobankService/DisconnectMonobank"
 )
@@ -32,6 +33,7 @@ type MonobankServiceClient interface {
 	// stores it encrypted, and registers our webhook so new transactions get
 	// pushed to us automatically.
 	ConnectMonobank(ctx context.Context, in *ConnectMonobankRequest, opts ...grpc.CallOption) (*MonobankStatusReply, error)
+	MonobankAccounts(ctx context.Context, in *MonobankAccountsRequest, opts ...grpc.CallOption) (*MonobankAccountsReply, error)
 	MonobankStatus(ctx context.Context, in *MonobankStatusRequest, opts ...grpc.CallOption) (*MonobankStatusReply, error)
 	DisconnectMonobank(ctx context.Context, in *DisconnectMonobankRequest, opts ...grpc.CallOption) (*DisconnectMonobankReply, error)
 }
@@ -48,6 +50,16 @@ func (c *monobankServiceClient) ConnectMonobank(ctx context.Context, in *Connect
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MonobankStatusReply)
 	err := c.cc.Invoke(ctx, MonobankService_ConnectMonobank_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *monobankServiceClient) MonobankAccounts(ctx context.Context, in *MonobankAccountsRequest, opts ...grpc.CallOption) (*MonobankAccountsReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MonobankAccountsReply)
+	err := c.cc.Invoke(ctx, MonobankService_MonobankAccounts_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +94,7 @@ type MonobankServiceServer interface {
 	// stores it encrypted, and registers our webhook so new transactions get
 	// pushed to us automatically.
 	ConnectMonobank(context.Context, *ConnectMonobankRequest) (*MonobankStatusReply, error)
+	MonobankAccounts(context.Context, *MonobankAccountsRequest) (*MonobankAccountsReply, error)
 	MonobankStatus(context.Context, *MonobankStatusRequest) (*MonobankStatusReply, error)
 	DisconnectMonobank(context.Context, *DisconnectMonobankRequest) (*DisconnectMonobankReply, error)
 	mustEmbedUnimplementedMonobankServiceServer()
@@ -96,6 +109,9 @@ type UnimplementedMonobankServiceServer struct{}
 
 func (UnimplementedMonobankServiceServer) ConnectMonobank(context.Context, *ConnectMonobankRequest) (*MonobankStatusReply, error) {
 	return nil, status.Error(codes.Unimplemented, "method ConnectMonobank not implemented")
+}
+func (UnimplementedMonobankServiceServer) MonobankAccounts(context.Context, *MonobankAccountsRequest) (*MonobankAccountsReply, error) {
+	return nil, status.Error(codes.Unimplemented, "method MonobankAccounts not implemented")
 }
 func (UnimplementedMonobankServiceServer) MonobankStatus(context.Context, *MonobankStatusRequest) (*MonobankStatusReply, error) {
 	return nil, status.Error(codes.Unimplemented, "method MonobankStatus not implemented")
@@ -138,6 +154,24 @@ func _MonobankService_ConnectMonobank_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MonobankServiceServer).ConnectMonobank(ctx, req.(*ConnectMonobankRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MonobankService_MonobankAccounts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MonobankAccountsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MonobankServiceServer).MonobankAccounts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MonobankService_MonobankAccounts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MonobankServiceServer).MonobankAccounts(ctx, req.(*MonobankAccountsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -188,6 +222,10 @@ var MonobankService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ConnectMonobank",
 			Handler:    _MonobankService_ConnectMonobank_Handler,
+		},
+		{
+			MethodName: "MonobankAccounts",
+			Handler:    _MonobankService_MonobankAccounts_Handler,
 		},
 		{
 			MethodName: "MonobankStatus",

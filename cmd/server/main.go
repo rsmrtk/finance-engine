@@ -17,7 +17,11 @@ import (
 	"github.com/rsmrtk/finance-engine/internal/ratesync"
 	"github.com/rsmrtk/finance-engine/internal/repository"
 	"github.com/rsmrtk/finance-engine/internal/rest"
+	"github.com/rsmrtk/finance-engine/internal/retention"
+	adminsvc "github.com/rsmrtk/finance-engine/internal/service/admin"
+	advisorsvc "github.com/rsmrtk/finance-engine/internal/service/advisor"
 	authsvc "github.com/rsmrtk/finance-engine/internal/service/auth"
+	billingsvc "github.com/rsmrtk/finance-engine/internal/service/billing"
 	categorysvc "github.com/rsmrtk/finance-engine/internal/service/category"
 	monobanksvc "github.com/rsmrtk/finance-engine/internal/service/monobank"
 	ratesvc "github.com/rsmrtk/finance-engine/internal/service/rate"
@@ -29,11 +33,16 @@ import (
 	"github.com/rsmrtk/finance-engine/pkg/dbq"
 	"github.com/rsmrtk/finance-engine/pkg/googleauth"
 	"github.com/rsmrtk/finance-engine/pkg/jwt"
+	"github.com/rsmrtk/finance-engine/pkg/liqpay"
 	"github.com/rsmrtk/finance-engine/pkg/logger"
 	"github.com/rsmrtk/finance-engine/pkg/monobank"
+	"github.com/rsmrtk/finance-engine/pkg/ollama"
 )
 
-const rateSyncInterval = 6 * time.Hour
+const (
+	rateSyncInterval      = 6 * time.Hour
+	retentionSyncInterval = 24 * time.Hour
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -82,6 +91,7 @@ func run() error {
 	transactionRepo := repository.NewTransactionRepository(queries)
 	rateRepo := repository.NewRateRepository(redisClient)
 	monobankRepo := repository.NewMonobankRepository(queries)
+	paymentRepo := repository.NewPaymentRepository(queries)
 	sessionRepo := repository.NewSessionRepository(queries)
 
 	// gRPC/iOS keeps its single long-lived JWT (no refresh, matches how the
@@ -102,6 +112,13 @@ func run() error {
 	monobankClient := monobank.New()
 	monobankService := monobanksvc.New(monobankRepo, monobankClient, tokenBox, cfg.PublicBaseURL)
 
+	ollamaClient := ollama.New(cfg.OllamaURL, cfg.OllamaModel)
+	advisorService := advisorsvc.New(transactionRepo, categoryRepo, rateRepo, ollamaClient, redisClient)
+
+	liqpayClient := liqpay.New(cfg.LiqPayPublicKey, cfg.LiqPayPrivateKey, cfg.LiqPaySandbox)
+	billingService := billingsvc.New(userRepo, paymentRepo, liqpayClient, cfg.CORSAllowedOrigin, cfg.PublicBaseURL, log)
+	adminService := adminsvc.New(userRepo, transactionRepo, billingService)
+
 	services := grpcserver.Services{
 		Auth:        authsvc.New(userRepo, appleVerifier, googleVerifier, jwtManager, cfg.DevMode),
 		Category:    categorysvc.New(categoryRepo),
@@ -115,6 +132,9 @@ func run() error {
 	syncer := ratesync.New(cfg.NBUExchangeURL, rateRepo, log)
 	go syncer.Run(ctx, rateSyncInterval)
 
+	retentionJob := retention.New(transactionRepo, log)
+	go retentionJob.Run(ctx, retentionSyncInterval)
+
 	server := grpcserver.NewServer(grpcserver.ServerOptions{
 		Address:  cfg.GRPCAddress,
 		JWT:      jwtManager,
@@ -123,18 +143,27 @@ func run() error {
 	})
 
 	monobankWebhook := webhook.NewMonobankHandler(monobankRepo, transactionRepo, categoryRepo, log)
+	liqpayWebhook := webhook.NewLiqPayHandler(billingService, log)
 	webhookMux := http.NewServeMux()
 	webhookMux.Handle("/webhooks/monobank/", monobankWebhook)
+	webhookMux.Handle("/webhooks/liqpay", liqpayWebhook)
 	// The web frontend's JSON API rides on this same plain-HTTP server —
 	// it's already the one port a browser (or Render/kind) can reach
 	// without speaking gRPC, so there's no need for a second listener.
 	webhookMux.Handle("/api/", rest.NewMux(rest.Options{
 		Services:      services,
 		Sessions:      sessionService,
+		Advisor:       advisorService,
+		Billing:       billingService,
+		Admin:         adminService,
 		JWT:           webAccessJWT,
 		CORSOrigin:    cfg.CORSAllowedOrigin,
+		AdminOrigin:   cfg.AdminDashboardOrigin,
+		AdminPassword: cfg.AdminPassword,
+		JWTSecret:     cfg.JWTSecret,
 		AccessMaxAge:  cfg.JWTWebAccessDuration,
 		RefreshMaxAge: cfg.SessionRefreshDuration,
+		Log:           log,
 	}))
 	webhookServer := &http.Server{Addr: cfg.WebhookAddress, Handler: webhookMux}
 
