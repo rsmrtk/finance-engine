@@ -22,13 +22,15 @@ type Category struct {
 }
 
 type MonobankConnection struct {
-	UserID         pgtype.UUID        `json:"user_id"`
-	EncryptedToken []byte             `json:"encrypted_token"`
-	WebhookSecret  string             `json:"webhook_secret"`
-	ConnectedAt    pgtype.Timestamptz `json:"connected_at"`
-	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
-	AccountIds     []string           `json:"account_ids"`
-	MaskedPans     []string           `json:"masked_pans"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	EncryptedToken    []byte             `json:"encrypted_token"`
+	WebhookSecret     string             `json:"webhook_secret"`
+	ConnectedAt       pgtype.Timestamptz `json:"connected_at"`
+	LastSyncedAt      pgtype.Timestamptz `json:"last_synced_at"`
+	AccountIds        []string           `json:"account_ids"`
+	MaskedPans        []string           `json:"masked_pans"`
+	AccountTypes      []string           `json:"account_types"`
+	AccountCurrencies []string           `json:"account_currencies"`
 }
 
 type PaymentEvent struct {
@@ -55,17 +57,20 @@ type Session struct {
 }
 
 type Transaction struct {
-	ID                 pgtype.UUID        `json:"id"`
-	UserID             pgtype.UUID        `json:"user_id"`
-	CategoryID         pgtype.UUID        `json:"category_id"`
-	Amount             pgtype.Numeric     `json:"amount"`
-	Currency           string             `json:"currency"`
-	Type               string             `json:"type"`
-	Date               pgtype.Timestamptz `json:"date"`
-	Note               string             `json:"note"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	ExternalID         string             `json:"external_id"`
-	IsInternalTransfer bool               `json:"is_internal_transfer"`
+	ID                    pgtype.UUID        `json:"id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	CategoryID            pgtype.UUID        `json:"category_id"`
+	Amount                pgtype.Numeric     `json:"amount"`
+	Currency              string             `json:"currency"`
+	Type                  string             `json:"type"`
+	Date                  pgtype.Timestamptz `json:"date"`
+	Note                  string             `json:"note"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ExternalID            string             `json:"external_id"`
+	IsInternalTransfer    bool               `json:"is_internal_transfer"`
+	OperationAmount       int64              `json:"operation_amount"`
+	OperationCurrencyCode int32              `json:"operation_currency_code"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

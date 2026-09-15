@@ -63,14 +63,15 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (repository.Transa
 }
 
 type UpdateParams struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	CategoryID uuid.UUID
-	Amount     string
-	Currency   string
-	Type       string
-	Date       time.Time
-	Note       string
+	ID                 uuid.UUID
+	UserID             uuid.UUID
+	CategoryID         uuid.UUID
+	Amount             string
+	Currency           string
+	Type               string
+	Date               time.Time
+	Note               string
+	IsInternalTransfer bool
 }
 
 func (s *Service) Update(ctx context.Context, p UpdateParams) (repository.Transaction, error) {
@@ -92,14 +93,15 @@ func (s *Service) Update(ctx context.Context, p UpdateParams) (repository.Transa
 	}
 
 	return s.transactions.UpdateForUser(ctx, repository.UpdateTransactionParams{
-		ID:         p.ID,
-		UserID:     p.UserID,
-		CategoryID: p.CategoryID,
-		Amount:     p.Amount,
-		Currency:   p.Currency,
-		Type:       p.Type,
-		Date:       p.Date,
-		Note:       p.Note,
+		ID:                 p.ID,
+		UserID:             p.UserID,
+		CategoryID:         p.CategoryID,
+		Amount:             p.Amount,
+		Currency:           p.Currency,
+		Type:               p.Type,
+		Date:               p.Date,
+		Note:               p.Note,
+		IsInternalTransfer: p.IsInternalTransfer,
 	})
 }
 

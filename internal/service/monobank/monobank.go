@@ -87,7 +87,7 @@ func (s *Service) ListAccounts(ctx context.Context, personalToken string) ([]Acc
 // breaks every connection attempt. SetWebHook (a different, separately
 // -limited endpoint) still fails loudly on a bad or revoked token, so
 // token validity isn't lost by skipping the recheck.
-func (s *Service) Connect(ctx context.Context, userID uuid.UUID, personalToken string, accountIDs, maskedPans []string) (Status, error) {
+func (s *Service) Connect(ctx context.Context, userID uuid.UUID, personalToken string, accountIDs, maskedPans, accountTypes, accountCurrencies []string) (Status, error) {
 	if personalToken == "" {
 		return Status{}, fmt.Errorf("personal_token is required")
 	}
@@ -114,11 +114,13 @@ func (s *Service) Connect(ctx context.Context, userID uuid.UUID, personalToken s
 	}
 
 	conn, err := s.connections.Upsert(ctx, repository.UpsertMonobankConnectionParams{
-		UserID:         userID,
-		EncryptedToken: encrypted,
-		WebhookSecret:  secret,
-		MaskedPans:     maskedPans,
-		AccountIDs:     accountIDs,
+		UserID:            userID,
+		EncryptedToken:    encrypted,
+		WebhookSecret:     secret,
+		MaskedPans:        maskedPans,
+		AccountIDs:        accountIDs,
+		AccountTypes:      accountTypes,
+		AccountCurrencies: accountCurrencies,
 	})
 	if err != nil {
 		return Status{}, fmt.Errorf("save connection: %w", err)
@@ -162,11 +164,11 @@ func (s *Service) ListMyAccounts(ctx context.Context, userID uuid.UUID) ([]Accou
 // — no Monobank call needed (the webhook is already registered for the
 // whole token, not per-account), just which account ids our own webhook
 // filter accepts.
-func (s *Service) UpdateAccounts(ctx context.Context, userID uuid.UUID, accountIDs, maskedPans []string) (Status, error) {
+func (s *Service) UpdateAccounts(ctx context.Context, userID uuid.UUID, accountIDs, maskedPans, accountTypes, accountCurrencies []string) (Status, error) {
 	if len(accountIDs) == 0 {
 		return Status{}, fmt.Errorf("at least one account_id is required")
 	}
-	conn, err := s.connections.UpdateAccounts(ctx, userID, accountIDs, maskedPans)
+	conn, err := s.connections.UpdateAccounts(ctx, userID, accountIDs, maskedPans, accountTypes, accountCurrencies)
 	if err != nil {
 		return Status{}, fmt.Errorf("update tracked accounts: %w", err)
 	}
@@ -184,20 +186,20 @@ func (s *Service) UpdateAccounts(ctx context.Context, userID uuid.UUID, accountI
 // more than one tracked account under the same token, only the first
 // gets synced per call; syncing the rest just means clicking again a
 // minute later.
-func (s *Service) SyncNow(ctx context.Context, userID uuid.UUID) (imported, reclassified int, err error) {
+func (s *Service) SyncNow(ctx context.Context, userID uuid.UUID) (imported int, err error) {
 	conn, err := s.connections.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, 0, fmt.Errorf("monobank is not connected")
+			return 0, fmt.Errorf("monobank is not connected")
 		}
-		return 0, 0, fmt.Errorf("lookup connection: %w", err)
+		return 0, fmt.Errorf("lookup connection: %w", err)
 	}
 	if len(conn.AccountIDs) == 0 {
-		return 0, 0, fmt.Errorf("no accounts are being tracked")
+		return 0, fmt.Errorf("no accounts are being tracked")
 	}
 	token, err := s.box.Decrypt(conn.EncryptedToken)
 	if err != nil {
-		return 0, 0, fmt.Errorf("decrypt token: %w", err)
+		return 0, fmt.Errorf("decrypt token: %w", err)
 	}
 
 	to := time.Now()
@@ -205,32 +207,30 @@ func (s *Service) SyncNow(ctx context.Context, userID uuid.UUID) (imported, recl
 
 	items, err := s.client.Statement(ctx, token, conn.AccountIDs[0], from, to)
 	if err != nil {
-		return 0, 0, fmt.Errorf("fetch statement: %w", err)
+		return 0, fmt.Errorf("fetch statement: %w", err)
 	}
 
+	// SyncNow only ever fetches conn.AccountIDs[0] (see the rate-limit
+	// comment above), so the account-level currency to cross-check
+	// against is always at the same index.
+	var accountCurrency string
+	if len(conn.AccountCurrencies) > 0 {
+		accountCurrency = conn.AccountCurrencies[0]
+	}
 	for _, item := range items {
-		created, itemErr := s.importer.Item(ctx, userID, item)
+		created, itemErr := s.importer.Item(ctx, userID, item, accountCurrency)
 		if itemErr != nil {
-			return imported, 0, fmt.Errorf("import transaction: %w", itemErr)
+			return imported, fmt.Errorf("import transaction: %w", itemErr)
 		}
 		if created {
 			imported++
 		}
 	}
 
-	// One-time-per-click backfill: re-checks every already-imported
-	// transaction for the internal-transfer patterns too, since data
-	// imported before this detection existed never got a chance to be
-	// flagged. Cheap for personal transaction volumes.
-	reclassified, err = s.importer.ReclassifyExisting(ctx, userID)
-	if err != nil {
-		reclassified = 0 // Best-effort — a failed backfill pass shouldn't fail the whole sync.
-	}
-
 	if err := s.connections.TouchSync(ctx, userID); err != nil {
-		return imported, reclassified, fmt.Errorf("touch sync: %w", err)
+		return imported, fmt.Errorf("touch sync: %w", err)
 	}
-	return imported, reclassified, nil
+	return imported, nil
 }
 
 func (s *Service) Status(ctx context.Context, userID uuid.UUID) (Status, error) {

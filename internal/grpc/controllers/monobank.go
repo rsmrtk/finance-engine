@@ -26,7 +26,12 @@ func (c *MonobankController) ConnectMonobank(ctx context.Context, req *pb.Connec
 		return nil, status.Error(codes.Unauthenticated, "missing user")
 	}
 
-	result, err := c.service.Connect(ctx, userID, req.GetPersonalToken(), req.GetAccountIds(), req.GetMaskedPans())
+	// The iOS proto has no account-type/currency fields yet, so this path
+	// can't feed the card-color tracked-account check (see
+	// internal/monobankimport) — nil here means those heuristics simply
+	// never fire for iOS-connected accounts, the safe default (same
+	// as any other untracked card).
+	result, err := c.service.Connect(ctx, userID, req.GetPersonalToken(), req.GetAccountIds(), req.GetMaskedPans(), nil, nil)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

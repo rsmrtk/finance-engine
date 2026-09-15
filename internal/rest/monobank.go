@@ -69,6 +69,12 @@ type connectMonobankRequest struct {
 	PersonalToken string   `json:"personalToken"`
 	AccountIDs    []string `json:"accountIds"`
 	MaskedPans    []string `json:"maskedPans"`
+	// AccountTypes/AccountCurrencies are parallel to AccountIDs — the
+	// frontend already has this metadata from the accounts() response it
+	// just picked from, echoed back here so the importer can later check
+	// "is this card actually one I track" (see internal/monobankimport).
+	AccountTypes      []string `json:"accountTypes"`
+	AccountCurrencies []string `json:"accountCurrencies"`
 }
 
 func (h *monobankHandler) connect(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +94,7 @@ func (h *monobankHandler) connect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	status, err := h.service.Connect(r.Context(), userID, req.PersonalToken, req.AccountIDs, req.MaskedPans)
+	status, err := h.service.Connect(r.Context(), userID, req.PersonalToken, req.AccountIDs, req.MaskedPans, req.AccountTypes, req.AccountCurrencies)
 	if err != nil {
 		h.log.Error("monobank connect failed", logger.H{"userId": userID.String(), "accountIds": req.AccountIDs, "error": err.Error()})
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -126,8 +132,10 @@ func (h *monobankHandler) myAccounts(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateAccountsMonobankRequest struct {
-	AccountIDs []string `json:"accountIds"`
-	MaskedPans []string `json:"maskedPans"`
+	AccountIDs        []string `json:"accountIds"`
+	MaskedPans        []string `json:"maskedPans"`
+	AccountTypes      []string `json:"accountTypes"`
+	AccountCurrencies []string `json:"accountCurrencies"`
 }
 
 func (h *monobankHandler) updateAccounts(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +154,7 @@ func (h *monobankHandler) updateAccounts(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	status, err := h.service.UpdateAccounts(r.Context(), userID, req.AccountIDs, req.MaskedPans)
+	status, err := h.service.UpdateAccounts(r.Context(), userID, req.AccountIDs, req.MaskedPans, req.AccountTypes, req.AccountCurrencies)
 	if err != nil {
 		h.log.Error("monobank update accounts failed", logger.H{"userId": userID.String(), "accountIds": req.AccountIDs, "error": err.Error()})
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -170,14 +178,14 @@ func (h *monobankHandler) sync(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "Monobank sync is available on the Max plan")
 		return
 	}
-	imported, reclassified, err := h.service.SyncNow(r.Context(), userID)
+	imported, err := h.service.SyncNow(r.Context(), userID)
 	if err != nil {
 		h.log.Error("monobank sync failed", logger.H{"userId": userID.String(), "error": err.Error()})
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.log.Info("monobank sync completed", logger.H{"userId": userID.String(), "imported": imported, "reclassified": reclassified})
-	writeJSON(w, http.StatusOK, map[string]int{"imported": imported, "reclassified": reclassified})
+	h.log.Info("monobank sync completed", logger.H{"userId": userID.String(), "imported": imported})
+	writeJSON(w, http.StatusOK, map[string]int{"imported": imported})
 }
 
 func (h *monobankHandler) status(w http.ResponseWriter, r *http.Request) {

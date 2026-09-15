@@ -83,11 +83,16 @@ func (h *MonobankHandler) process(ctx context.Context, secret string, payload mo
 	}
 
 	item := payload.Data.StatementItem
-	if !slices.Contains(conn.AccountIDs, payload.Data.Account) {
+	accountIndex := slices.Index(conn.AccountIDs, payload.Data.Account)
+	if accountIndex == -1 {
 		return nil // An account on the same token the user didn't select to track.
 	}
 
-	if _, err := h.importer.Item(ctx, conn.UserID, item); err != nil {
+	var accountCurrency string
+	if accountIndex < len(conn.AccountCurrencies) {
+		accountCurrency = conn.AccountCurrencies[accountIndex]
+	}
+	if _, err := h.importer.Item(ctx, conn.UserID, item, accountCurrency); err != nil {
 		return err
 	}
 

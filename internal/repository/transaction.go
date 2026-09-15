@@ -24,6 +24,17 @@ type Transaction struct {
 	CreatedAt          time.Time
 	IsInternalTransfer bool   // Money moved between the user's own accounts — not real income/expense.
 	ExternalID         string // Monobank's statementItem.id — "" for manually-entered transactions.
+	// OperationAmount/OperationCurrencyCode are Monobank's own raw fields
+	// (see pkg/monobank.StatementItem) — diagnostic only, kept for
+	// forensic queries when Amount/Currency look wrong; never used by any
+	// business logic or surfaced over the API.
+	OperationAmount       int64
+	OperationCurrencyCode int
+	// UpdatedAt is zero until the first edit — set only by UpdateForUser,
+	// never by import/create, and never used for ordering (the
+	// transaction list sorts by Date) — editing a transaction records
+	// when that happened without moving it in the list.
+	UpdatedAt time.Time
 }
 
 type TransactionRepository struct {
@@ -81,15 +92,22 @@ func (r *TransactionRepository) Create(ctx context.Context, p CreateTransactionP
 }
 
 type CreateTransactionWithExternalIDParams struct {
-	UserID             uuid.UUID
-	CategoryID         uuid.UUID
-	Amount             string
-	Currency           string
-	Type               string
-	Date               time.Time
-	Note               string
-	ExternalID         string // Monobank's statementItem.id — never empty for this path.
-	IsInternalTransfer bool   // Set when the description itself gives it away (e.g. a jar top-up).
+	UserID     uuid.UUID
+	CategoryID uuid.UUID
+	Amount     string
+	Currency   string
+	Type       string
+	Date       time.Time
+	Note       string
+	ExternalID string // Monobank's statementItem.id — never empty for this path.
+	// OperationAmount/OperationCurrencyCode are Monobank's own raw fields
+	// (see pkg/monobank.StatementItem), stored write-only for future
+	// forensic queries — never read back by any business logic, but
+	// durable (unlike a log line, which a routine redeploy erases) so
+	// "what did Monobank actually send for this one" always has an
+	// answer later.
+	OperationAmount       int64
+	OperationCurrencyCode int
 }
 
 // CreateWithExternalID is Create for Monobank imports (webhook + manual
@@ -101,15 +119,16 @@ func (r *TransactionRepository) CreateWithExternalID(ctx context.Context, p Crea
 		return Transaction{}, false, err
 	}
 	row, err := r.q.TransactionCreateWithExternalID(ctx, dbq.TransactionCreateWithExternalIDParams{
-		UserID:             pgutil.UUIDFromGoogle(p.UserID),
-		CategoryID:         pgutil.NullUUIDFromGoogle(p.CategoryID),
-		Amount:             amount,
-		Currency:           p.Currency,
-		Type:               p.Type,
-		Date:               pgutil.TimeFromGo(p.Date),
-		Note:               p.Note,
-		ExternalID:         p.ExternalID,
-		IsInternalTransfer: p.IsInternalTransfer,
+		UserID:                pgutil.UUIDFromGoogle(p.UserID),
+		CategoryID:            pgutil.NullUUIDFromGoogle(p.CategoryID),
+		Amount:                amount,
+		Currency:              p.Currency,
+		Type:                  p.Type,
+		Date:                  pgutil.TimeFromGo(p.Date),
+		Note:                  p.Note,
+		ExternalID:            p.ExternalID,
+		OperationAmount:       p.OperationAmount,
+		OperationCurrencyCode: int32(p.OperationCurrencyCode),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -120,49 +139,16 @@ func (r *TransactionRepository) CreateWithExternalID(ctx context.Context, p Crea
 	return transactionFromRow(row), true, nil
 }
 
-// FindTransferMatch looks for the other side of an internal transfer:
-// same user, opposite type, exact same amount+currency, another
-// Monobank-imported transaction not already flagged, within
-// [windowStart, windowEnd]. ok is false if nothing matched.
-func (r *TransactionRepository) FindTransferMatch(
-	ctx context.Context,
-	userID uuid.UUID,
-	oppositeType, amount string,
-	windowStart, windowEnd time.Time,
-) (Transaction, bool, error) {
-	numAmount, err := pgutil.NumericFromString(amount)
-	if err != nil {
-		return Transaction{}, false, err
-	}
-	row, err := r.q.TransactionFindTransferMatch(ctx, dbq.TransactionFindTransferMatchParams{
-		UserID: pgutil.UUIDFromGoogle(userID),
-		Type:   oppositeType,
-		Amount: numAmount,
-		Date:   pgutil.TimeFromGo(windowStart),
-		Date_2: pgutil.TimeFromGo(windowEnd),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Transaction{}, false, nil
-		}
-		return Transaction{}, false, err
-	}
-	return transactionFromRow(row), true, nil
-}
-
-func (r *TransactionRepository) MarkInternalTransfer(ctx context.Context, id uuid.UUID) error {
-	return r.q.TransactionMarkInternalTransfer(ctx, pgutil.UUIDFromGoogle(id))
-}
-
 type UpdateTransactionParams struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	CategoryID uuid.UUID
-	Amount     string
-	Currency   string
-	Type       string
-	Date       time.Time
-	Note       string
+	ID                 uuid.UUID
+	UserID             uuid.UUID
+	CategoryID         uuid.UUID
+	Amount             string
+	Currency           string
+	Type               string
+	Date               time.Time
+	Note               string
+	IsInternalTransfer bool // User-editable override — see TransactionUpdateForUser.
 }
 
 // UpdateForUser returns pgx.ErrNoRows if the transaction doesn't exist or
@@ -174,14 +160,15 @@ func (r *TransactionRepository) UpdateForUser(ctx context.Context, p UpdateTrans
 		return Transaction{}, err
 	}
 	row, err := r.q.TransactionUpdateForUser(ctx, dbq.TransactionUpdateForUserParams{
-		ID:         pgutil.UUIDFromGoogle(p.ID),
-		UserID:     pgutil.UUIDFromGoogle(p.UserID),
-		CategoryID: pgutil.NullUUIDFromGoogle(p.CategoryID),
-		Amount:     amount,
-		Currency:   p.Currency,
-		Type:       p.Type,
-		Date:       pgutil.TimeFromGo(p.Date),
-		Note:       p.Note,
+		ID:                 pgutil.UUIDFromGoogle(p.ID),
+		UserID:             pgutil.UUIDFromGoogle(p.UserID),
+		CategoryID:         pgutil.NullUUIDFromGoogle(p.CategoryID),
+		Amount:             amount,
+		Currency:           p.Currency,
+		Type:               p.Type,
+		Date:               pgutil.TimeFromGo(p.Date),
+		Note:               p.Note,
+		IsInternalTransfer: p.IsInternalTransfer,
 	})
 	if err != nil {
 		return Transaction{}, err
@@ -217,16 +204,19 @@ func (r *TransactionRepository) DeleteExpiredForPlan(ctx context.Context, planNa
 
 func transactionFromRow(row dbq.Transaction) Transaction {
 	return Transaction{
-		ID:                 pgutil.UUIDToGoogle(row.ID),
-		UserID:             pgutil.UUIDToGoogle(row.UserID),
-		CategoryID:         pgutil.UUIDToGoogle(row.CategoryID),
-		Amount:             pgutil.NumericToString(row.Amount),
-		Currency:           row.Currency,
-		Type:               row.Type,
-		Date:               row.Date.Time,
-		Note:               row.Note,
-		CreatedAt:          row.CreatedAt.Time,
-		IsInternalTransfer: row.IsInternalTransfer,
-		ExternalID:         row.ExternalID,
+		ID:                    pgutil.UUIDToGoogle(row.ID),
+		UserID:                pgutil.UUIDToGoogle(row.UserID),
+		CategoryID:            pgutil.UUIDToGoogle(row.CategoryID),
+		Amount:                pgutil.NumericToString(row.Amount),
+		Currency:              row.Currency,
+		Type:                  row.Type,
+		Date:                  row.Date.Time,
+		Note:                  row.Note,
+		CreatedAt:             row.CreatedAt.Time,
+		IsInternalTransfer:    row.IsInternalTransfer,
+		ExternalID:            row.ExternalID,
+		OperationAmount:       row.OperationAmount,
+		OperationCurrencyCode: int(row.OperationCurrencyCode),
+		UpdatedAt:             optionalTime(row.UpdatedAt),
 	}
 }

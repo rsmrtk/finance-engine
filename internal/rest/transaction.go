@@ -24,6 +24,10 @@ type createTransactionRequest struct {
 	Type       string `json:"type"`
 	Date       string `json:"date"`
 	Note       string `json:"note"`
+	// IsInternalTransfer is only meaningful on update() — create() always
+	// starts a manually-entered transaction as a real income/expense, so
+	// this field is simply ignored there.
+	IsInternalTransfer bool `json:"isInternalTransfer"`
 }
 
 func (h *transactionHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -115,6 +119,7 @@ func (h *transactionHandler) update(w http.ResponseWriter, r *http.Request) {
 	updated, err := h.service.Update(r.Context(), transactionsvc.UpdateParams{
 		ID: transactionID, UserID: userID, CategoryID: categoryID, Amount: req.Amount,
 		Currency: req.Currency, Type: req.Type, Date: date, Note: req.Note,
+		IsInternalTransfer: req.IsInternalTransfer,
 	})
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())

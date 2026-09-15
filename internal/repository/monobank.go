@@ -19,6 +19,14 @@ type MonobankConnection struct {
 	AccountIDs     []string
 	ConnectedAt    time.Time
 	LastSyncedAt   time.Time // Zero value if never synced.
+	// AccountTypes/AccountCurrencies are parallel to AccountIDs (same
+	// index = same account) — Monobank's own "type" (white/black/
+	// platinum/fop/...) and currency for each tracked account. Lets the
+	// importer check "is the card this description names actually one I
+	// track" before trusting a card-color mention as an internal
+	// transfer — see internal/monobankimport.
+	AccountTypes      []string
+	AccountCurrencies []string
 }
 
 type MonobankRepository struct {
@@ -30,32 +38,38 @@ func NewMonobankRepository(q *dbq.Queries) *MonobankRepository {
 }
 
 type UpsertMonobankConnectionParams struct {
-	UserID         uuid.UUID
-	EncryptedToken []byte
-	WebhookSecret  string
-	MaskedPans     []string
-	AccountIDs     []string
+	UserID            uuid.UUID
+	EncryptedToken    []byte
+	WebhookSecret     string
+	MaskedPans        []string
+	AccountIDs        []string
+	AccountTypes      []string
+	AccountCurrencies []string
 }
 
 func (r *MonobankRepository) Upsert(ctx context.Context, p UpsertMonobankConnectionParams) (MonobankConnection, error) {
 	row, err := r.q.MonobankConnectionUpsert(ctx, dbq.MonobankConnectionUpsertParams{
-		UserID:         pgutil.UUIDFromGoogle(p.UserID),
-		EncryptedToken: p.EncryptedToken,
-		WebhookSecret:  p.WebhookSecret,
-		MaskedPans:     p.MaskedPans,
-		AccountIds:     p.AccountIDs,
+		UserID:            pgutil.UUIDFromGoogle(p.UserID),
+		EncryptedToken:    p.EncryptedToken,
+		WebhookSecret:     p.WebhookSecret,
+		MaskedPans:        p.MaskedPans,
+		AccountIds:        p.AccountIDs,
+		AccountTypes:      p.AccountTypes,
+		AccountCurrencies: p.AccountCurrencies,
 	})
 	if err != nil {
 		return MonobankConnection{}, err
 	}
 	return MonobankConnection{
-		UserID:         pgutil.UUIDToGoogle(row.UserID),
-		EncryptedToken: row.EncryptedToken,
-		WebhookSecret:  row.WebhookSecret,
-		MaskedPans:     row.MaskedPans,
-		AccountIDs:     row.AccountIds,
-		ConnectedAt:    row.ConnectedAt.Time,
-		LastSyncedAt:   optionalTime(row.LastSyncedAt),
+		UserID:            pgutil.UUIDToGoogle(row.UserID),
+		EncryptedToken:    row.EncryptedToken,
+		WebhookSecret:     row.WebhookSecret,
+		MaskedPans:        row.MaskedPans,
+		AccountIDs:        row.AccountIds,
+		ConnectedAt:       row.ConnectedAt.Time,
+		LastSyncedAt:      optionalTime(row.LastSyncedAt),
+		AccountTypes:      row.AccountTypes,
+		AccountCurrencies: row.AccountCurrencies,
 	}, nil
 }
 
@@ -65,13 +79,15 @@ func (r *MonobankRepository) GetByUserID(ctx context.Context, userID uuid.UUID) 
 		return MonobankConnection{}, err
 	}
 	return MonobankConnection{
-		UserID:         pgutil.UUIDToGoogle(row.UserID),
-		EncryptedToken: row.EncryptedToken,
-		WebhookSecret:  row.WebhookSecret,
-		MaskedPans:     row.MaskedPans,
-		AccountIDs:     row.AccountIds,
-		ConnectedAt:    row.ConnectedAt.Time,
-		LastSyncedAt:   optionalTime(row.LastSyncedAt),
+		UserID:            pgutil.UUIDToGoogle(row.UserID),
+		EncryptedToken:    row.EncryptedToken,
+		WebhookSecret:     row.WebhookSecret,
+		MaskedPans:        row.MaskedPans,
+		AccountIDs:        row.AccountIds,
+		ConnectedAt:       row.ConnectedAt.Time,
+		LastSyncedAt:      optionalTime(row.LastSyncedAt),
+		AccountTypes:      row.AccountTypes,
+		AccountCurrencies: row.AccountCurrencies,
 	}, nil
 }
 
@@ -81,33 +97,39 @@ func (r *MonobankRepository) GetByWebhookSecret(ctx context.Context, secret stri
 		return MonobankConnection{}, err
 	}
 	return MonobankConnection{
-		UserID:         pgutil.UUIDToGoogle(row.UserID),
-		EncryptedToken: row.EncryptedToken,
-		WebhookSecret:  row.WebhookSecret,
-		MaskedPans:     row.MaskedPans,
-		AccountIDs:     row.AccountIds,
-		ConnectedAt:    row.ConnectedAt.Time,
-		LastSyncedAt:   optionalTime(row.LastSyncedAt),
+		UserID:            pgutil.UUIDToGoogle(row.UserID),
+		EncryptedToken:    row.EncryptedToken,
+		WebhookSecret:     row.WebhookSecret,
+		MaskedPans:        row.MaskedPans,
+		AccountIDs:        row.AccountIds,
+		ConnectedAt:       row.ConnectedAt.Time,
+		LastSyncedAt:      optionalTime(row.LastSyncedAt),
+		AccountTypes:      row.AccountTypes,
+		AccountCurrencies: row.AccountCurrencies,
 	}, nil
 }
 
-func (r *MonobankRepository) UpdateAccounts(ctx context.Context, userID uuid.UUID, accountIDs, maskedPans []string) (MonobankConnection, error) {
+func (r *MonobankRepository) UpdateAccounts(ctx context.Context, userID uuid.UUID, accountIDs, maskedPans, accountTypes, accountCurrencies []string) (MonobankConnection, error) {
 	row, err := r.q.MonobankConnectionUpdateAccounts(ctx, dbq.MonobankConnectionUpdateAccountsParams{
-		UserID:     pgutil.UUIDFromGoogle(userID),
-		AccountIds: accountIDs,
-		MaskedPans: maskedPans,
+		UserID:            pgutil.UUIDFromGoogle(userID),
+		AccountIds:        accountIDs,
+		MaskedPans:        maskedPans,
+		AccountTypes:      accountTypes,
+		AccountCurrencies: accountCurrencies,
 	})
 	if err != nil {
 		return MonobankConnection{}, err
 	}
 	return MonobankConnection{
-		UserID:         pgutil.UUIDToGoogle(row.UserID),
-		EncryptedToken: row.EncryptedToken,
-		WebhookSecret:  row.WebhookSecret,
-		MaskedPans:     row.MaskedPans,
-		AccountIDs:     row.AccountIds,
-		ConnectedAt:    row.ConnectedAt.Time,
-		LastSyncedAt:   optionalTime(row.LastSyncedAt),
+		UserID:            pgutil.UUIDToGoogle(row.UserID),
+		EncryptedToken:    row.EncryptedToken,
+		WebhookSecret:     row.WebhookSecret,
+		MaskedPans:        row.MaskedPans,
+		AccountIDs:        row.AccountIds,
+		ConnectedAt:       row.ConnectedAt.Time,
+		LastSyncedAt:      optionalTime(row.LastSyncedAt),
+		AccountTypes:      row.AccountTypes,
+		AccountCurrencies: row.AccountCurrencies,
 	}, nil
 }
 

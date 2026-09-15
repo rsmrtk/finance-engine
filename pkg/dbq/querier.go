@@ -42,31 +42,27 @@ type Querier interface {
 	// ON CONFLICT DO NOTHING makes re-importing the same statement item a
 	// harmless no-op instead of a duplicate row. No rows returned means it
 	// already existed; the caller treats pgx.ErrNoRows as "skipped", not a
-	// failure. is_internal_transfer is set at creation only when the
-	// description itself gives it away (e.g. a jar top-up) — the other
-	// detection path (matching against a same-amount opposite-type
-	// transaction on a different tracked account) runs after creation, see
-	// TransactionFindTransferMatch + TransactionMarkInternalTransfer.
+	// failure. is_internal_transfer always starts false — the account owner
+	// flags a transfer themselves afterward (see TransactionUpdateForUser),
+	// automatic detection kept getting confidently wrong. operation_amount/
+	// operation_currency_code are Monobank's own raw fields (see
+	// pkg/monobank.StatementItem) — stored durably so a future "what did
+	// Monobank actually send for this one" question can be answered by
+	// querying the row directly, without needing a still-live pod's log
+	// (which a routine redeploy erases) or the user's Monobank token.
 	TransactionCreateWithExternalID(ctx context.Context, arg TransactionCreateWithExternalIDParams) (Transaction, error)
 	// Data-retention cleanup: Free keeps 30 days, Pro keeps 365 — see
 	// internal/plan and internal/retention. Max/Enterprise never call this.
 	TransactionDeleteExpiredForPlan(ctx context.Context, arg TransactionDeleteExpiredForPlanParams) (int64, error)
 	TransactionDeleteForUser(ctx context.Context, arg TransactionDeleteForUserParams) (int64, error)
-	// Looks for the other side of an internal transfer: same user, opposite
-	// type, exact same amount, another Monobank-imported transaction
-	// (external_id set) not already flagged, within the time window the
-	// caller passes in. Deliberately NOT filtered by currency: Monobank has
-	// been observed reporting the two legs of the same real transfer with
-	// mismatched currency labels (e.g. one side EUR, the other UAH, same
-	// exact decimal amount — a real cross-currency conversion would never
-	// produce an identical number on both sides at anything but a 1:1 rate),
-	// so requiring a currency match was silently failing to catch exactly
-	// the cases this exists for. A same-amount, opposite-type,
-	// seconds-apart coincidence between two unrelated transactions is
-	// vanishingly unlikely regardless.
-	TransactionFindTransferMatch(ctx context.Context, arg TransactionFindTransferMatchParams) (Transaction, error)
 	TransactionListForUser(ctx context.Context, arg TransactionListForUserParams) ([]Transaction, error)
-	TransactionMarkInternalTransfer(ctx context.Context, id pgtype.UUID) error
+	// updated_at is set here only — never touched by import/create, and
+	// never used for ORDER BY anywhere (TransactionListForUser sorts by
+	// `date`, the transaction's own date) — so editing a transaction (e.g.
+	// fixing its currency) records when the edit happened without ever
+	// moving the row in the list. is_internal_transfer is user-editable here
+	// — the account owner's own manual call on whether a transaction is a
+	// transfer, not a guess this app makes for them.
 	TransactionUpdateForUser(ctx context.Context, arg TransactionUpdateForUserParams) (Transaction, error)
 	UserCountByPlan(ctx context.Context) ([]UserCountByPlanRow, error)
 	UserCreate(ctx context.Context, arg UserCreateParams) (UserCreateRow, error)
